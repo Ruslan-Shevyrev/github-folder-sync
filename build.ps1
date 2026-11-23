@@ -19,7 +19,7 @@ try {
     & $venvPython -m pip install pyinstaller
     if ($LASTEXITCODE -ne 0) { throw 'Could not install PyInstaller.' }
 
-    & $venvPython -m PyInstaller --onedir --windowed --noconfirm --name GitHubFolderComparison --specpath build app.py
+    & $venvPython -m PyInstaller --onedir --windowed --noconfirm --name GitHubFolderComparison --specpath build synhronized-githab-and-folder.py
     if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed.' }
 
     Write-Host 'Application: dist\GitHubFolderComparison\GitHubFolderComparison.exe'

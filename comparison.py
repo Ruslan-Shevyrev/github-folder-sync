@@ -1,10 +1,12 @@
 import json
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+from branches import Branch, BranchError, compare_branches
 
 
 @dataclass(frozen=True)
@@ -12,6 +14,8 @@ class Match:
     name: str
     local_path: str = ""
     github_url: str = ""
+    branches: tuple[Branch, ...] = ()
+    branch_error: str = ""
 
     @property
     def status(self):
@@ -71,3 +75,10 @@ def compare(folder, login):
         if name.casefold() not in local_names
     )
     return sorted(rows, key=lambda row: (row.name.casefold(), row.name))
+
+
+def with_branches(row):
+    try:
+        return replace(row, branches=compare_branches(row.local_path, row.github_url))
+    except BranchError as error:
+        return replace(row, branch_error=str(error))

@@ -1,11 +1,11 @@
 import tkinter as tk
-import webbrowser
 from collections import Counter
 from queue import Empty, Queue
 from threading import Thread
 from tkinter import filedialog, ttk
 
-from comparison import compare
+from comparison import compare, with_branches
+from results_table import ResultsTable
 
 
 STATUSES = {
@@ -30,13 +30,6 @@ def configure_theme(root):
     style.configure("Accent.TButton", background="#7446ee", bordercolor="#7446ee",
                     padding=(16, 7), font=("Segoe UI", 10, "bold"))
     style.map("Accent.TButton", background=[("disabled", "#222740"), ("active", "#865cff")])
-    style.configure("Treeview", background="#101321", fieldbackground="#101321",
-                    bordercolor="#343956", rowheight=30)
-    style.configure("Treeview.Heading", background="#222740", relief="flat",
-                    font=("Segoe UI", 10, "bold"))
-    style.map("Treeview.Heading", background=[("active", "#222740")])
-    style.map("Treeview", background=[("selected", "#513ca0")],
-              foreground=[("selected", "#ffffff")])
     for orientation in ("Vertical", "Horizontal"):
         style.configure(f"{orientation}.TScrollbar", background="#343956", troughcolor="#191d30")
 
@@ -68,7 +61,7 @@ def run():
     login = tk.StringVar()
     status = tk.StringVar(value="Выберите папку и укажите логин GitHub.")
     results = Queue()
-    urls = {}
+    counts = Counter()
 
     panel = ttk.Frame(root, style="Panel.TFrame", padding=16)
     panel.pack(fill="both", expand=True, padx=12, pady=12)
@@ -95,63 +88,41 @@ def run():
     browse = ttk.Button(panel, text="Обзор…", command=choose_folder)
     browse.grid(row=1, column=2, sticky="ew")
 
-    table = ttk.Treeview(panel, columns=("name", "status", "path", "github"), show="headings")
-    columns = (
-        ("name", "Название", 205),
-        ("status", "Статус", 175),
-        ("path", "Локальный путь", 295),
-        ("github", "Ссылка на GitHub", 285),
-    )
-    for column, title, width in columns:
-        table.heading(column, text=title, anchor="w")
-        table.column(column, width=width, minwidth=width, stretch=column in ("path", "github"))
-    for key, (_, background, foreground) in STATUSES.items():
-        table.tag_configure(key, background=background, foreground=foreground)
-    vertical = ttk.Scrollbar(panel, orient="vertical", command=table.yview)
-    horizontal = ttk.Scrollbar(panel, orient="horizontal", command=table.xview)
-    table.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
+    table = ResultsTable(panel)
     table.grid(row=4, column=0, columnspan=3, sticky="nsew")
-    vertical.grid(row=4, column=3, sticky="ns")
-    horizontal.grid(row=5, column=0, columnspan=3, sticky="ew")
     ttk.Label(panel, textvariable=status, style="Status.TLabel", wraplength=680).grid(
-        row=6, column=0, columnspan=3, sticky="w", pady=(10, 0)
+        row=5, column=0, columnspan=3, sticky="w", pady=(10, 0)
     )
 
-    def open_link(event):
-        if table.identify_column(event.x) == "#4":
-            url = urls.get(table.identify_row(event.y))
-            if url:
-                webbrowser.open(url)
-
-    table.bind("<Double-1>", open_link)
     ttk.Label(panel, text="Двойной щелчок по ссылке откроет репозиторий в браузере.",
               style="Status.TLabel").grid(row=3, column=0, columnspan=3, sticky="w", pady=(0, 8))
 
     def load(path, account):
         try:
-            results.put((compare(path, account), None))
+            rows = compare(path, account)
+            for row in rows:
+                results.put(("row", with_branches(row)))
+            results.put(("done", None))
         except (ValueError, OSError, TypeError, KeyError) as error:
-            results.put((None, str(error)))
+            results.put(("error", str(error)))
 
     def show_results():
-        try:
-            rows, error = results.get_nowait()
-        except Empty:
-            root.after(75, show_results)
+        for _ in range(30):
+            try:
+                kind, value = results.get_nowait()
+            except Empty:
+                break
+            if kind == "row":
+                table.add(value, STATUSES[value.status])
+                counts[value.status] += 1
+                status.set(f"Проверяем ветки… Обработано репозиториев: {sum(counts.values())}")
+                continue
+            for widget in controls:
+                widget.state(["!disabled"])
+            summary = "  ·  ".join(f"{label} — {counts[key]}" for key, (label, _, _) in STATUSES.items())
+            status.set(value if kind == "error" else summary)
             return
-        for widget in controls:
-            widget.state(["!disabled"])
-        if error is not None:
-            status.set(error)
-            return
-        counts = Counter(row.status for row in rows)
-        for row in rows:
-            item = table.insert("", "end", values=(
-                row.name, STATUSES[row.status][0], row.local_path, row.github_url
-            ), tags=(row.status,))
-            if row.github_url:
-                urls[item] = row.github_url
-        status.set("  ·  ".join(f"{label} — {counts[key]}" for key, (label, _, _) in STATUSES.items()))
+        root.after(75, show_results)
 
     def submit():
         if button.instate(["disabled"]):
@@ -159,8 +130,8 @@ def run():
         path, account = folder.get().strip(), login.get().strip()
         for widget in controls:
             widget.state(["disabled"])
-        table.delete(*table.get_children())
-        urls.clear()
+        table.clear()
+        counts.clear()
         status.set("Сравниваем папки с публичными репозиториями…")
         Thread(target=load, args=(path, account), daemon=True).start()
         root.after(75, show_results)
