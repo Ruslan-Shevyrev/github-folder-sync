@@ -6,6 +6,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Push-Location $PSScriptRoot
+$settingsFile = 'dist\GitHubFolderComparison\settings\settings.json'
+$settingsBackup = $null
 try {
     $venvPython = '.\.venv\Scripts\python.exe'
     if (-not (Test-Path -LiteralPath $venvPython)) {
@@ -19,6 +21,10 @@ try {
     & $venvPython -m pip install pyinstaller
     if ($LASTEXITCODE -ne 0) { throw 'Could not install PyInstaller.' }
 
+    if (Test-Path -LiteralPath $settingsFile -PathType Leaf) {
+        $settingsBackup = [IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $settingsFile))
+    }
+
     & $venvPython -m PyInstaller --onedir --windowed --noconfirm --name GitHubFolderComparison --specpath build github_folder_sync.py
     if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed.' }
 
@@ -31,5 +37,14 @@ try {
     }
 }
 finally {
-    Pop-Location
+    try {
+        if ($null -ne $settingsBackup -and -not (Test-Path -LiteralPath $settingsFile)) {
+            $settingsPath = Join-Path $PSScriptRoot $settingsFile
+            [IO.Directory]::CreateDirectory((Split-Path -Parent $settingsPath)) | Out-Null
+            [IO.File]::WriteAllBytes($settingsPath, $settingsBackup)
+        }
+    }
+    finally {
+        Pop-Location
+    }
 }

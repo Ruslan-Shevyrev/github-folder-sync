@@ -2,9 +2,11 @@ import tkinter as tk
 from collections import Counter
 from queue import Empty, Queue
 from threading import Thread
-from tkinter import filedialog, ttk
+from tkinter import filedialog, messagebox, ttk
+from pathlib import Path
 
-from comparison import compare, with_branches
+from comparison import compare, validate_login, with_branches
+from settings import load_settings, save_settings, settings_path
 from results_table import ResultsTable
 
 
@@ -25,6 +27,21 @@ def configure_theme(root):
     style.configure("Status.TLabel", foreground="#b8b5d0")
     style.configure("TEntry", fieldbackground="#222740", insertcolor="#f4f1ff",
                     bordercolor="#343956", lightcolor="#222740", darkcolor="#222740", padding=(9, 7))
+    style.map("TEntry", fieldbackground=[("readonly", "#222740")])
+    style.configure("Treeview", background="#101321", fieldbackground="#101321",
+                    foreground="#f4f1ff", rowheight=27)
+    style.configure("Treeview.Heading", background="#222740")
+    style.map("Treeview", background=[("selected", "#513ca0")],
+              foreground=[("selected", "#ffffff")])
+    style.configure("TCombobox", fieldbackground="#222740", arrowcolor="#f4f1ff", padding=(9, 6))
+    style.map("TCombobox", fieldbackground=[("readonly", "#222740")],
+              foreground=[("readonly", "#f4f1ff")])
+    root.option_add("*TCombobox*Listbox.background", "#222740")
+    root.option_add("*TCombobox*Listbox.foreground", "#f4f1ff")
+    style.configure("TCheckbutton", background="#191d30", indicatorbackground="#222740",
+                    indicatorbordercolor="#777d9a", indicatorforeground="#f4f1ff")
+    style.map("TCheckbutton", background=[("active", "#191d30")],
+              indicatorbackground=[("selected", "#7446ee"), ("active", "#343052")])
     style.configure("TButton", background="#222740", bordercolor="#343956", padding=(10, 7))
     style.map("TButton", background=[("active", "#343052")], foreground=[("disabled", "#9591ac")])
     style.configure("Accent.TButton", background="#7446ee", bordercolor="#7446ee",
@@ -50,6 +67,114 @@ def edit_shortcut_on_windows(event):
         return "break"
 
 
+def create_dialog(parent, title, *, resizable=False):
+    dialog = tk.Toplevel(parent, background="#101321")
+    dialog.withdraw()
+    dialog.title(title)
+    dialog.transient(parent)
+    dialog.resizable(resizable, resizable)
+    frame = ttk.Frame(dialog, padding=16)
+    frame.pack(fill="both", expand=True)
+    return dialog, frame
+
+
+def show_dialog(dialog, focus):
+    previous_grab = dialog.grab_current()
+
+    def close():
+        dialog.destroy()
+        if previous_grab is not None:
+            previous_grab.grab_set()
+
+    dialog.protocol("WM_DELETE_WINDOW", close)
+    dialog.bind("<Escape>", lambda _: close())
+    dialog.update_idletasks()
+    x = (dialog.winfo_screenwidth() - dialog.winfo_reqwidth()) // 2
+    y = (dialog.winfo_screenheight() - dialog.winfo_reqheight()) // 2
+    dialog.geometry(f"+{max(0, x)}+{max(0, y)}")
+    dialog.deiconify()
+    dialog.grab_set()
+    focus.focus_set()
+    return close
+
+
+def dialog_entry(frame, value="", *, readonly=False):
+    entry = ttk.Entry(frame, width=48)
+    entry.insert(0, value)
+    if readonly:
+        entry.state(["readonly"])
+    if frame.tk.call("tk", "windowingsystem") == "win32":
+        entry.bind("<Control-KeyPress>", edit_shortcut_on_windows)
+    return entry
+
+
+def dialog_actions(dialog, frame, row, focus, save):
+    actions = ttk.Frame(frame)
+    actions.grid(row=row, column=0, columnspan=3, sticky="e")
+    cancel = ttk.Button(actions, text="Отмена")
+    cancel.pack(side="left", padx=(0, 6))
+    save_button = ttk.Button(actions, text="Сохранить", style="Accent.TButton")
+    save_button.pack(side="left")
+    close = show_dialog(dialog, focus)
+    cancel.configure(command=close)
+
+    def submit():
+        try:
+            if save():
+                close()
+        except (OSError, ValueError, RuntimeError) as error:
+            messagebox.showerror("Не удалось сохранить", str(error), parent=dialog)
+        return "break"
+
+    save_button.configure(command=submit)
+    dialog.bind("<Return>", lambda _: submit())
+
+
+def user_dialog(parent, on_save):
+    dialog, frame = create_dialog(parent, "Добавить пользователя")
+    ttk.Label(frame, text="Логин GitHub").grid(row=0, column=0, sticky="w")
+    entry = dialog_entry(frame)
+    entry.grid(row=1, column=0, sticky="ew", pady=(6, 10))
+    dialog_actions(dialog, frame, 2, entry, lambda: on_save(entry.get().strip()))
+
+
+def profile_dialog(parent, profile, on_save, *, users=(), name="", is_default=False, editing=False):
+    title = "Редактирование профиля" if editing else "Сохранение профиля"
+    dialog, frame = create_dialog(parent, title)
+    frame.columnconfigure(1, weight=1)
+    name_input = dialog_entry(frame, name)
+    path_input = dialog_entry(frame, profile["folder"], readonly=not editing)
+    if editing:
+        account_input = ttk.Combobox(frame, state="readonly", values=sorted(users, key=str.casefold))
+        account_input.set(profile["login"])
+    else:
+        account_input = dialog_entry(frame, profile["login"], readonly=True)
+    for row, (label, field) in enumerate((
+        ("Имя профиля", name_input),
+        ("Пользователь GitHub", account_input),
+        ("Локальная папка", path_input),
+    )):
+        ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
+        field.grid(row=row, column=1, sticky="ew", pady=(0, 8))
+
+    if editing:
+        def browse():
+            path = filedialog.askdirectory(parent=dialog, mustexist=True)
+            if path:
+                path_input.delete(0, "end")
+                path_input.insert(0, path)
+
+        ttk.Button(frame, text="Обзор…", command=browse).grid(row=2, column=2, padx=(8, 0), pady=(0, 8))
+
+    default = tk.BooleanVar(master=dialog, value=is_default)
+    ttk.Checkbutton(frame, text="Настройки по умолчанию", variable=default).grid(
+        row=3, column=1, sticky="w", pady=(0, 10)
+    )
+    dialog_actions(dialog, frame, 4, name_input, lambda: on_save(
+        name_input.get().strip(), account_input.get(), path_input.get().strip(), default.get()
+    ))
+
+
 def run():
     root = tk.Tk()
     root.title("Папки и репозитории GitHub")
@@ -59,26 +184,223 @@ def run():
 
     folder = tk.StringVar()
     login = tk.StringVar()
-    status = tk.StringVar(value="Выберите папку и укажите логин GitHub.")
+    profile_name = tk.StringVar()
+    status = tk.StringVar(value="Выберите папку и сохранённого пользователя GitHub.")
+    preferences_path = settings_path()
+    try:
+        preferences = load_settings(preferences_path)
+    except (OSError, ValueError) as error:
+        preferences = {"users": [], "profiles": {}, "default_profile": None}
+        status.set(f"Не удалось прочитать настройки: {error}")
     results = Queue()
     counts = Counter()
 
     panel = ttk.Frame(root, style="Panel.TFrame", padding=16)
     panel.pack(fill="both", expand=True, padx=12, pady=12)
     panel.columnconfigure(1, weight=1)
-    panel.rowconfigure(4, weight=1)
+    panel.rowconfigure(6, weight=1)
     ttk.Label(panel, text="Публичные репозитории GitHub", style="Heading.TLabel").grid(
         row=0, column=0, columnspan=3, sticky="w", pady=(0, 14)
     )
-    ttk.Label(panel, text="Локальная папка").grid(row=1, column=0, sticky="w")
+    ttk.Label(panel, text="Пользователь GitHub").grid(row=1, column=0, sticky="w")
+    login_input = ttk.Combobox(panel, textvariable=login, state="readonly")
+    login_input.grid(row=1, column=1, sticky="ew", padx=8)
+    ttk.Label(panel, text="Локальная папка").grid(row=2, column=0, sticky="w")
     folder_input = ttk.Entry(panel, textvariable=folder)
-    folder_input.grid(row=1, column=1, sticky="ew", padx=8)
-    ttk.Label(panel, text="Логин GitHub").grid(row=2, column=0, sticky="w")
-    login_input = ttk.Entry(panel, textvariable=login)
-    login_input.grid(row=2, column=1, sticky="ew", padx=8, pady=8)
+    folder_input.grid(row=2, column=1, sticky="ew", padx=8, pady=8)
     if root.tk.call("tk", "windowingsystem") == "win32":
-        for entry in (folder_input, login_input):
-            entry.bind("<Control-KeyPress>", edit_shortcut_on_windows)
+        folder_input.bind("<Control-KeyPress>", edit_shortcut_on_windows)
+
+    ttk.Label(panel, text="Профиль").grid(row=3, column=0, sticky="w")
+    profile_input = ttk.Combobox(panel, textvariable=profile_name, state="readonly")
+    profile_input.grid(row=3, column=1, sticky="ew", padx=8)
+
+    def refresh_choices():
+        login_input.configure(values=sorted(preferences["users"], key=str.casefold))
+        profile_input.configure(values=sorted(preferences["profiles"], key=str.casefold))
+
+    def apply_profile(_event=None):
+        profile = preferences["profiles"].get(profile_name.get())
+        if profile:
+            folder.set(profile["folder"])
+            login.set(profile["login"])
+
+    def add_user(name):
+        nonlocal preferences
+        validate_login(name)
+        data = load_settings(preferences_path)
+        existing = next((user for user in data["users"] if user.casefold() == name.casefold()), None)
+        if existing is None:
+            data["users"].append(name)
+            save_settings(preferences_path, data)
+        preferences = data
+        refresh_choices()
+        login.set(existing or name)
+        profile_name.set("")
+        status.set("Пользователь выбран.")
+        return True
+
+    def save_profile(name, account, folder_path, default, *, original=None):
+        nonlocal preferences
+        if not name:
+            raise ValueError("Введите имя профиля.")
+        if not folder_path:
+            raise ValueError("Укажите локальную папку.")
+        data = load_settings(preferences_path)
+        if account not in data["users"]:
+            raise ValueError("Выберите сохранённого пользователя GitHub.")
+        profiles = data["profiles"]
+        if original is not None and original not in profiles:
+            raise ValueError("Этот профиль уже удалён.")
+        if name in profiles and name != original:
+            if original is not None:
+                raise ValueError("Профиль с таким именем уже существует.")
+            if not messagebox.askyesno(
+                "Профиль уже существует", f"Заменить профиль «{name}»?", parent=root.grab_current()
+            ):
+                return False
+        path = str(Path(folder_path).expanduser().absolute())
+        if original is not None and original != name:
+            del profiles[original]
+        profiles[name] = {"folder": path, "login": account}
+        if default:
+            data["default_profile"] = name
+        elif data["default_profile"] in (name, original):
+            data["default_profile"] = None
+        save_settings(preferences_path, data)
+        preferences = data
+        refresh_choices()
+        if original is None or profile_name.get() == original:
+            profile_name.set(name)
+            apply_profile()
+        status.set(f"Профиль «{name}» сохранён.")
+        return True
+
+    def open_profile_dialog():
+        path = folder.get().strip()
+        account = login.get()
+        if not path or not account:
+            messagebox.showinfo("Сохранение профиля", "Укажите папку и выберите пользователя GitHub.", parent=root)
+            return
+        profile_dialog(root, {"folder": path, "login": account}, save_profile)
+
+    def open_profiles():
+        nonlocal preferences
+        try:
+            preferences = load_settings(preferences_path)
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Не удалось открыть профили", str(error), parent=root)
+            return
+        refresh_choices()
+        dialog, frame = create_dialog(root, "Просмотр профилей", resizable=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
+        table = ttk.Treeview(frame, columns=("name", "login", "folder", "default"), show="headings",
+                             selectmode="browse", height=8)
+        columns = (
+            ("name", "Имя профиля", 150),
+            ("login", "Пользователь GitHub", 160),
+            ("folder", "Локальная папка", 300),
+            ("default", "По умолчанию", 110),
+        )
+        for column, label, width in columns:
+            table.heading(column, text=label, anchor="w")
+            table.column(column, width=width, minwidth=width, stretch=column == "folder")
+        vertical = ttk.Scrollbar(frame, orient="vertical", command=table.yview)
+        horizontal = ttk.Scrollbar(frame, orient="horizontal", command=table.xview)
+        table.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
+        table.grid(row=0, column=0, sticky="nsew")
+        vertical.grid(row=0, column=1, sticky="ns")
+        horizontal.grid(row=1, column=0, sticky="ew")
+        actions = ttk.Frame(frame)
+        actions.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+
+        def refresh(selected=None):
+            table.delete(*table.get_children())
+            for name in sorted(preferences["profiles"], key=str.casefold):
+                profile = preferences["profiles"][name]
+                default = "Да" if name == preferences["default_profile"] else "—"
+                table.insert("", "end", iid=name, values=(name, profile["login"], profile["folder"], default))
+            if selected is not None and table.exists(selected):
+                table.selection_set(selected)
+                table.focus(selected)
+                table.see(selected)
+            update_actions()
+
+        def update_actions(_event=None):
+            state = ["!disabled"] if table.selection() else ["disabled"]
+            edit_button.state(state)
+            delete_button.state(state)
+
+        def edit():
+            selection = table.selection()
+            if not selection:
+                return
+            original = selection[0]
+
+            def save(name, account, path, default):
+                if save_profile(name, account, path, default, original=original):
+                    refresh(name)
+                    return True
+                return False
+
+            profile_dialog(dialog, preferences["profiles"][original], save, name=original,
+                           users=preferences["users"], is_default=preferences["default_profile"] == original,
+                           editing=True)
+
+        def delete():
+            nonlocal preferences
+            selection = table.selection()
+            if not selection:
+                return
+            name = selection[0]
+            if not messagebox.askyesno("Удаление профиля", f"Удалить профиль «{name}»?", parent=dialog):
+                return
+            try:
+                data = load_settings(preferences_path)
+                data["profiles"].pop(name, None)
+                if data["default_profile"] == name:
+                    data["default_profile"] = None
+                save_settings(preferences_path, data)
+            except (OSError, ValueError) as error:
+                messagebox.showerror("Не удалось удалить профиль", str(error), parent=dialog)
+                return
+            preferences = data
+            if profile_name.get() == name:
+                profile_name.set("")
+            refresh_choices()
+            refresh()
+            status.set(f"Профиль «{name}» удалён.")
+
+        edit_button = ttk.Button(actions, text="Редактировать", command=edit)
+        edit_button.pack(side="left")
+        delete_button = ttk.Button(actions, text="Удалить", command=delete)
+        delete_button.pack(side="left", padx=6)
+        close_button = ttk.Button(actions, text="Закрыть")
+        close_button.pack(side="right")
+        table.bind("<<TreeviewSelect>>", update_actions)
+
+        def edit_row(event):
+            item = table.identify_row(event.y)
+            if item:
+                table.selection_set(item)
+                edit()
+
+        table.bind("<Double-1>", edit_row)
+        refresh(profile_name.get())
+        close_button.configure(command=show_dialog(dialog, table))
+
+    add_button = ttk.Button(panel, text="Добавить пользователя", command=lambda: user_dialog(root, add_user))
+    add_button.grid(row=1, column=2, sticky="ew")
+    save_button = ttk.Button(panel, text="Сохранить", command=open_profile_dialog)
+    save_button.grid(row=3, column=2, sticky="ew")
+    profiles_button = ttk.Button(panel, text="Просмотр профилей", command=open_profiles)
+    profiles_button.grid(row=4, column=1, sticky="e", padx=8, pady=(8, 0))
+    profile_input.bind("<<ComboboxSelected>>", apply_profile)
+    refresh_choices()
+    if preferences["default_profile"]:
+        profile_name.set(preferences["default_profile"])
+        apply_profile()
 
     def choose_folder():
         selected = filedialog.askdirectory(parent=root, title="Выберите папку", mustexist=True)
@@ -86,16 +408,16 @@ def run():
             folder.set(selected)
 
     browse = ttk.Button(panel, text="Обзор…", command=choose_folder)
-    browse.grid(row=1, column=2, sticky="ew")
+    browse.grid(row=2, column=2, sticky="ew")
 
     table = ResultsTable(panel)
-    table.grid(row=4, column=0, columnspan=3, sticky="nsew")
+    table.grid(row=6, column=0, columnspan=3, sticky="nsew")
     ttk.Label(panel, textvariable=status, style="Status.TLabel", wraplength=680).grid(
-        row=5, column=0, columnspan=3, sticky="w", pady=(10, 0)
+        row=7, column=0, columnspan=3, sticky="w", pady=(10, 0)
     )
 
     ttk.Label(panel, text="Двойной щелчок по ссылке откроет репозиторий в браузере.",
-              style="Status.TLabel").grid(row=3, column=0, columnspan=3, sticky="w", pady=(0, 8))
+              style="Status.TLabel").grid(row=5, column=0, columnspan=3, sticky="w", pady=(5, 8))
 
     def load(path, account):
         try:
@@ -127,7 +449,10 @@ def run():
     def submit():
         if button.instate(["disabled"]):
             return
-        path, account = folder.get().strip(), login.get().strip()
+        path, account = folder.get().strip(), login.get()
+        if not path or not account:
+            status.set("Укажите папку и выберите сохранённого пользователя GitHub.")
+            return
         for widget in controls:
             widget.state(["disabled"])
         table.clear()
@@ -137,8 +462,8 @@ def run():
         root.after(75, show_results)
 
     button = ttk.Button(panel, text="Сравнить", style="Accent.TButton", command=submit)
-    button.grid(row=2, column=2, sticky="ew")
-    controls = (folder_input, login_input, browse, button)
+    button.grid(row=4, column=2, sticky="ew", pady=(8, 0))
+    controls = (folder_input, login_input, profile_input, browse, add_button, save_button, profiles_button, button)
     root.bind("<Return>", lambda _event: submit())
-    folder_input.focus_set()
+    login_input.focus_set()
     root.mainloop()

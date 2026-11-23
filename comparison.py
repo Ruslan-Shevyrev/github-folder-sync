@@ -24,10 +24,13 @@ class Match:
         return "local" if self.local_path else "github"
 
 
-def public_repositories(login):
+def validate_login(login):
     if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", login, re.ASCII | re.IGNORECASE) or len(login) > 39:
         raise ValueError("Введите логин GitHub, например octocat.")
 
+
+def public_repositories(login):
+    validate_login(login)
     url = f"https://api.github.com/users/{login}/repos?type=owner&sort=full_name&per_page=100"
     repositories = {}
     while url:
