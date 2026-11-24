@@ -40,6 +40,7 @@ class ResultsTable(ttk.Frame):
         vertical.grid(row=0, column=1, sticky="ns")
         horizontal.grid(row=1, column=0, sticky="ew")
         self.canvas.bind("<MouseWheel>", self.scroll)
+        self.commit_tooltip = None
         self.clear()
 
     def scroll(self, event):
@@ -47,6 +48,7 @@ class ResultsTable(ttk.Frame):
         return "break"
 
     def clear(self):
+        self.hide_commit()
         self.canvas.delete("all")
         self.width = sum(width for _, width in COLUMNS)
         self.bottom = 34
@@ -86,20 +88,53 @@ class ResultsTable(ttk.Frame):
         self.bottom = bottom + 1
         self.canvas.configure(scrollregion=(0, 0, self.width, self.bottom))
 
+    def hide_commit(self, _event=None):
+        if self.commit_tooltip is not None:
+            self.commit_tooltip.destroy()
+            self.commit_tooltip = None
+
+    def show_commit(self, event, commit):
+        self.hide_commit()
+        tooltip = tk.Toplevel(self.canvas, background="#343956")
+        self.commit_tooltip = tooltip
+        tooltip.wm_overrideredirect(True)
+        ttk.Label(tooltip, text=commit, padding=(8, 4)).pack(padx=1, pady=1)
+        tooltip.update_idletasks()
+        x = min(event.x_root + 12, tooltip.winfo_screenwidth() - tooltip.winfo_reqwidth())
+        y = min(event.y_root + 18, tooltip.winfo_screenheight() - tooltip.winfo_reqheight())
+        tooltip.geometry(f"+{max(0, x)}+{max(0, y)}")
+
+    def draw_commit(self, x, y, side, commit, color, width):
+        item = self.text(x, y, f"{side} ({commit[:12]})", BRANCH_COLORS[color], width)
+        self.canvas.tag_bind(item, "<Enter>", lambda event: self.show_commit(event, commit))
+        self.canvas.tag_bind(item, "<Leave>", self.hide_commit)
+        return item
+
     def draw_branches(self, row, x, y, width):
         if row.branch_error or not row.branches:
             item = self.text(x, y, row.branch_error or "—", BRANCH_COLORS["gray"], width)
             return self.canvas.bbox(item)[3]
         for branch in row.branches:
+            side_width = 175
+            name_width = width - 2 * side_width
+            label = branch.name
             if branch.status in BRANCH_LABELS:
-                label, color = BRANCH_LABELS[branch.status]
-                item = self.text(x, y, f"{branch.name} · {label}", BRANCH_COLORS[color], width)
-                y = self.canvas.bbox(item)[3] + 2
+                detail, color = BRANCH_LABELS[branch.status]
+                label = f"{label} · {detail}"
+                foreground = BRANCH_COLORS[color]
+                local = remote = color
             else:
-                name = self.text(x, y, branch.name, "#f4f1ff", width - 220)
+                foreground = "#f4f1ff"
                 local = "yellow" if branch.status == "ahead" else "red"
                 remote = "red" if branch.status == "ahead" else "yellow"
-                self.text(x + width - 210, y, "Локально", BRANCH_COLORS[local])
-                self.text(x + width - 105, y, "GitHub", BRANCH_COLORS[remote])
-                y = self.canvas.bbox(name)[3] + 2
+
+            items = [self.text(x, y, label, foreground, name_width - 8)]
+            if branch.local_commit:
+                items.append(self.draw_commit(x + name_width, y, "Локально", branch.local_commit,
+                                              local, side_width - 8))
+            if branch.remote_commit:
+                offset = side_width if branch.local_commit else 0
+                items.append(self.draw_commit(x + name_width + offset, y, "GitHub", branch.remote_commit,
+                                              remote, side_width - 8))
+            y = max(self.canvas.bbox(item)[3] for item in items) + 2
         return y

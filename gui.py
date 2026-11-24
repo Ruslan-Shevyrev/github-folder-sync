@@ -30,7 +30,10 @@ def configure_theme(root):
     style.map("TEntry", fieldbackground=[("readonly", "#222740")])
     style.configure("Treeview", background="#101321", fieldbackground="#101321",
                     foreground="#f4f1ff", rowheight=27)
-    style.configure("Treeview.Heading", background="#222740")
+    style.configure("Treeview.Heading", background="#222740", foreground="#f4f1ff",
+                    bordercolor="#343956", lightcolor="#222740", darkcolor="#222740")
+    style.map("Treeview.Heading", background=[("pressed", "#4a347a"), ("active", "#343052")],
+              foreground=[("pressed", "#f4f1ff"), ("active", "#f4f1ff")])
     style.map("Treeview", background=[("selected", "#513ca0")],
               foreground=[("selected", "#ffffff")])
     style.configure("TCombobox", fieldbackground="#222740", arrowcolor="#f4f1ff", padding=(9, 6))
@@ -130,10 +133,11 @@ def dialog_actions(dialog, frame, row, focus, save):
     dialog.bind("<Return>", lambda _: submit())
 
 
-def user_dialog(parent, on_save):
-    dialog, frame = create_dialog(parent, "Добавить пользователя")
+def user_dialog(parent, on_save, *, login=""):
+    title = "Редактирование пользователя" if login else "Добавить пользователя"
+    dialog, frame = create_dialog(parent, title)
     ttk.Label(frame, text="Логин GitHub").grid(row=0, column=0, sticky="w")
-    entry = dialog_entry(frame)
+    entry = dialog_entry(frame, login)
     entry.grid(row=1, column=0, sticky="ew", pady=(6, 10))
     dialog_actions(dialog, frame, 2, entry, lambda: on_save(entry.get().strip()))
 
@@ -239,6 +243,124 @@ def run():
         profile_name.set("")
         status.set("Пользователь выбран.")
         return True
+
+    def open_users():
+        nonlocal preferences
+        try:
+            preferences = load_settings(preferences_path)
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Не удалось открыть список пользователей", str(error), parent=root)
+            return
+        refresh_choices()
+        dialog, frame = create_dialog(root, "Просмотр пользователей", resizable=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
+        table = ttk.Treeview(frame, columns=("login",), show="headings", selectmode="browse", height=8)
+        table.heading("login", text="Пользователь GitHub", anchor="w")
+        table.column("login", width=360, minwidth=180)
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=table.yview)
+        table.configure(yscrollcommand=scrollbar.set)
+        table.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        actions = ttk.Frame(frame)
+        actions.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+
+        def update_actions(_event=None):
+            state = ["!disabled"] if table.selection() else ["disabled"]
+            edit_button.state(state)
+            delete_button.state(state)
+
+        def refresh(selected):
+            table.delete(*table.get_children())
+            for user in sorted(preferences["users"], key=str.casefold):
+                table.insert("", "end", iid=user, values=(user,))
+            if selected and table.exists(selected):
+                table.selection_set(selected)
+                table.focus(selected)
+                table.see(selected)
+            update_actions()
+
+        def edit():
+            selection = table.selection()
+            if not selection:
+                return
+            original = selection[0]
+
+            def save(name):
+                nonlocal preferences
+                validate_login(name)
+                data = load_settings(preferences_path)
+                users = data["users"]
+                if original not in users:
+                    raise ValueError("Этот пользователь больше не сохранён.")
+                if any(user != original and user.casefold() == name.casefold() for user in users):
+                    raise ValueError("Пользователь с таким логином уже сохранён.")
+                if name != original:
+                    users[users.index(original)] = name
+                    for profile in data["profiles"].values():
+                        if profile["login"] == original:
+                            profile["login"] = name
+                    save_settings(preferences_path, data)
+                preferences = data
+                if login.get() == original:
+                    login.set(name)
+                refresh_choices()
+                refresh(name)
+                status.set(f"Логин «{name}» сохранён.")
+                return True
+
+            user_dialog(dialog, save, login=original)
+
+        def delete():
+            nonlocal preferences
+            selection = table.selection()
+            if not selection:
+                return
+            name = selection[0]
+            if not messagebox.askyesno(
+                "Удаление пользователя",
+                f"Удалить пользователя «{name}» и все связанные с ним профили?",
+                parent=dialog,
+            ):
+                return
+            try:
+                data = load_settings(preferences_path)
+                data["users"] = [user for user in data["users"] if user != name]
+                data["profiles"] = {
+                    key: profile for key, profile in data["profiles"].items()
+                    if profile["login"] != name
+                }
+                if data["default_profile"] not in data["profiles"]:
+                    data["default_profile"] = None
+                save_settings(preferences_path, data)
+            except (OSError, ValueError) as error:
+                messagebox.showerror("Не удалось удалить пользователя", str(error), parent=dialog)
+                return
+            preferences = data
+            if login.get() == name:
+                login.set("")
+            if profile_name.get() not in data["profiles"]:
+                profile_name.set("")
+            refresh_choices()
+            refresh(login.get())
+            status.set(f"Пользователь «{name}» и его профили удалены.")
+
+        def edit_row(event):
+            item = table.identify_row(event.y)
+            if item:
+                table.selection_set(item)
+                edit()
+
+        edit_button = ttk.Button(actions, text="Редактировать", command=edit)
+        edit_button.pack(side="left")
+        delete_button = ttk.Button(actions, text="Удалить", command=delete)
+        delete_button.pack(side="left", padx=6)
+        close_button = ttk.Button(actions, text="Закрыть")
+        close_button.pack(side="right")
+        table.bind("<<TreeviewSelect>>", update_actions)
+        table.bind("<Double-1>", edit_row)
+        refresh(login.get())
+        close_button.configure(command=show_dialog(dialog, table))
 
     def save_profile(name, account, folder_path, default, *, original=None):
         nonlocal preferences
@@ -394,8 +516,12 @@ def run():
     add_button.grid(row=1, column=2, sticky="ew")
     save_button = ttk.Button(panel, text="Сохранить", command=open_profile_dialog)
     save_button.grid(row=3, column=2, sticky="ew")
-    profiles_button = ttk.Button(panel, text="Просмотр профилей", command=open_profiles)
-    profiles_button.grid(row=4, column=1, sticky="e", padx=8, pady=(8, 0))
+    navigation = ttk.Frame(panel)
+    navigation.grid(row=4, column=1, sticky="e", padx=8, pady=(8, 0))
+    users_button = ttk.Button(navigation, text="Просмотр пользователей", command=open_users)
+    users_button.pack(side="left", padx=(0, 6))
+    profiles_button = ttk.Button(navigation, text="Просмотр профилей", command=open_profiles)
+    profiles_button.pack(side="left")
     profile_input.bind("<<ComboboxSelected>>", apply_profile)
     refresh_choices()
     if preferences["default_profile"]:
@@ -463,7 +589,7 @@ def run():
 
     button = ttk.Button(panel, text="Сравнить", style="Accent.TButton", command=submit)
     button.grid(row=4, column=2, sticky="ew", pady=(8, 0))
-    controls = (folder_input, login_input, profile_input, browse, add_button, save_button, profiles_button, button)
+    controls = (folder_input, login_input, profile_input, browse, add_button, save_button, profiles_button, users_button, button)
     root.bind("<Return>", lambda _event: submit())
     login_input.focus_set()
     root.mainloop()

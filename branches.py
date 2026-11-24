@@ -9,6 +9,8 @@ from pathlib import Path
 class Branch:
     name: str
     status: str
+    local_commit: str = ""
+    remote_commit: str = ""
 
 
 class BranchError(Exception):
@@ -103,5 +105,5 @@ def compare_branches(path, url):
             status = "equal"
         else:
             status = relationship(path, local[name], remote[name], shallow)
-        branches.append(Branch(name, status))
+        branches.append(Branch(name, status, local.get(name, ""), remote.get(name, "")))
     return tuple(branches)
