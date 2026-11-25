@@ -3,12 +3,13 @@ from collections import Counter
 from dataclasses import replace
 from queue import Empty, Queue
 from threading import Thread
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, ttk
 from pathlib import Path
 
 import customtkinter as ctk
 
 from branches import BranchError
+from dialog_position import center_windows_dialog
 from comparison import compare, delete_local_folder, refresh_repository, validate_login, with_branches
 from git_sync import clone_from_github, sync_from_github
 from settings import load_settings, save_settings, settings_path
@@ -118,9 +119,67 @@ def show_dialog(dialog, focus):
     y = (dialog.winfo_screenheight() - dialog.winfo_reqheight()) // 2
     dialog.geometry(f"+{max(0, x)}+{max(0, y)}")
     dialog.deiconify()
+    dialog.update_idletasks()
+    if dialog.tk.call("tk", "windowingsystem") == "win32":
+        center_windows_dialog(dialog)
     dialog.grab_set()
     focus.focus_set()
     return close
+
+
+def confirm_action(parent, title, details, button_text, on_confirm, *, destructive=False, on_cancel=None):
+    dialog, frame = create_dialog(parent, title)
+    frame.columnconfigure(0, weight=1)
+    label_widget(frame, text=title, heading=True).grid(row=0, column=0, sticky="w", pady=(0, 10))
+    label_widget(frame, text=details, muted=True,
+                 justify="left", anchor="w", wraplength=460).grid(row=1, column=0, sticky="ew")
+    actions = ctk.CTkFrame(frame, fg_color="transparent")
+    actions.grid(row=2, column=0, sticky="e", pady=(16, 0))
+    cancel = button_widget(actions, text="Отмена")
+    cancel.pack(side="left", padx=(0, 6))
+    confirm = button_widget(actions, text=button_text, primary=True)
+    if destructive:
+        confirm.configure(fg_color="#983c53", hover_color="#b94c67")
+    confirm.pack(side="left")
+
+    close = show_dialog(dialog, cancel)
+
+    def dismiss():
+        close()
+        if on_cancel is not None:
+            on_cancel()
+
+    cancel.configure(command=dismiss)
+    dialog.protocol("WM_DELETE_WINDOW", dismiss)
+    dialog.bind("<Escape>", lambda _: dismiss())
+
+    def submit():
+        close()
+        on_confirm()
+
+    confirm.configure(command=submit)
+    return dialog
+
+
+def modal_message(title, details, *, parent, question=False, warning=False):
+    answer = False
+    if question:
+        def accept():
+            nonlocal answer
+            answer = True
+
+        dialog = confirm_action(parent, title, details, "Подтвердить", accept, destructive=warning)
+    else:
+        dialog, frame = create_dialog(parent, title)
+        label_widget(frame, text=title, heading=True).pack(anchor="w", pady=(0, 10))
+        label_widget(frame, text=details, muted=True, justify="left", wraplength=460).pack(anchor="w")
+        ok = button_widget(frame, text="OK", primary=True)
+        ok.pack(anchor="e", pady=(16, 0))
+        close = show_dialog(dialog, ok)
+        ok.configure(command=close)
+        dialog.bind("<Return>", lambda _: close())
+    parent.wait_window(dialog)
+    return answer
 
 
 def dialog_entry(frame, value="", *, readonly=False):
@@ -148,7 +207,7 @@ def dialog_actions(dialog, frame, row, focus, save):
             if save():
                 close()
         except (OSError, ValueError, RuntimeError) as error:
-            messagebox.showerror("Не удалось сохранить", str(error), parent=dialog)
+            modal_message("Не удалось сохранить", str(error), parent=dialog)
         return "break"
 
     save_button.configure(command=submit)
@@ -274,7 +333,7 @@ def run():
         try:
             preferences = load_settings(preferences_path)
         except (OSError, ValueError) as error:
-            messagebox.showerror("Не удалось открыть список пользователей", str(error), parent=root)
+            modal_message("Не удалось открыть список пользователей", str(error), parent=root)
             return
         refresh_choices()
         dialog, frame = create_dialog(root, "Просмотр пользователей", resizable=True)
@@ -342,10 +401,10 @@ def run():
             if not selection:
                 return
             name = selection[0]
-            if not messagebox.askyesno(
+            if not modal_message(
                 "Удаление пользователя",
                 f"Удалить пользователя «{name}» и все связанные с ним профили?",
-                parent=dialog,
+                parent=dialog, question=True, warning=True,
             ):
                 return
             try:
@@ -359,7 +418,7 @@ def run():
                     data["default_profile"] = None
                 save_settings(preferences_path, data)
             except (OSError, ValueError) as error:
-                messagebox.showerror("Не удалось удалить пользователя", str(error), parent=dialog)
+                modal_message("Не удалось удалить пользователя", str(error), parent=dialog)
                 return
             preferences = data
             if login.get() == name:
@@ -402,8 +461,8 @@ def run():
         if name in profiles and name != original:
             if original is not None:
                 raise ValueError("Профиль с таким именем уже существует.")
-            if not messagebox.askyesno(
-                "Профиль уже существует", f"Заменить профиль «{name}»?", parent=root.grab_current()
+            if not modal_message(
+                "Профиль уже существует", f"Заменить профиль «{name}»?", parent=root.grab_current(), question=True
             ):
                 return False
         path = str(Path(folder_path).expanduser().absolute())
@@ -427,7 +486,7 @@ def run():
         path = folder.get().strip()
         account = login.get()
         if not path or not account:
-            messagebox.showinfo("Сохранение профиля", "Укажите папку и выберите пользователя GitHub.", parent=root)
+            modal_message("Сохранение профиля", "Укажите папку и выберите пользователя GitHub.", parent=root)
             return
         profile_dialog(root, {"folder": path, "login": account}, save_profile)
 
@@ -436,7 +495,7 @@ def run():
         try:
             preferences = load_settings(preferences_path)
         except (OSError, ValueError) as error:
-            messagebox.showerror("Не удалось открыть профили", str(error), parent=root)
+            modal_message("Не удалось открыть профили", str(error), parent=root)
             return
         refresh_choices()
         dialog, frame = create_dialog(root, "Просмотр профилей", resizable=True)
@@ -501,7 +560,7 @@ def run():
             if not selection:
                 return
             name = selection[0]
-            if not messagebox.askyesno("Удаление профиля", f"Удалить профиль «{name}»?", parent=dialog):
+            if not modal_message("Удаление профиля", f"Удалить профиль «{name}»?", parent=dialog, question=True, warning=True):
                 return
             try:
                 data = load_settings(preferences_path)
@@ -510,7 +569,7 @@ def run():
                     data["default_profile"] = None
                 save_settings(preferences_path, data)
             except (OSError, ValueError) as error:
-                messagebox.showerror("Не удалось удалить профиль", str(error), parent=dialog)
+                modal_message("Не удалось удалить профиль", str(error), parent=dialog)
                 return
             preferences = data
             if profile_name.get() == name:
@@ -565,18 +624,28 @@ def run():
         if button.cget("state") == "disabled":
             return False
         if compared != (folder.get().strip(), login.get()):
-            messagebox.showinfo("Сравнение устарело", "Сначала повторите сравнение для выбранных настроек.",
+            modal_message("Сравнение устарело", "Сначала повторите сравнение для выбранных настроек.",
                                 parent=root)
             return False
         return True
 
+    def set_busy(busy):
+        for widget in controls:
+            state = "disabled" if busy else ("readonly" if widget in (login_input, profile_input) else "normal")
+            widget.configure(state=state)
+        folder_input.configure(text_color="#9398ad" if busy else TEXT)
+        table.set_actions_enabled(not busy)
+
+    def show_loader(action):
+        loader_label.configure(text=action)
+        loader_group.grid()
+        loader.start()
+
     def run_row_action(row, action, operation=None):
         base_path, account = compared
-        for widget in controls:
-            widget.configure(state="disabled")
-        status.set(f"{action}… {row.name}")
-        loader.grid()
-        loader.start()
+        set_busy(True)
+        status.set(row.name)
+        show_loader(action)
 
         def worker():
             errors = []
@@ -604,19 +673,21 @@ def run():
 
     def request_refresh(row):
         if can_update_row():
-            run_row_action(row, "Обновляем строку")
+            run_row_action(row, "Обновление строки")
 
     def request_delete(row):
         if not can_update_row() or not row.local_path:
             return
         path = Path(row.local_path)
-        if messagebox.askyesno(
-            "Удаление локальной папки",
-            f"Удалить папку безвозвратно, включая все файлы и локальные коммиты?\n\n{path}",
-            parent=root, icon="warning", default="no",
-        ):
-            base_path = compared[0]
-            run_row_action(row, "Удаляем локальную папку", lambda: delete_local_folder(base_path, path))
+        base_path = compared[0]
+        set_busy(True)
+        confirm_action(
+            root, "Удаление локальной папки",
+            f"Папка, все её файлы и локальные коммиты будут удалены безвозвратно.\n\n{path}",
+            "Удалить",
+            lambda: run_row_action(row, "Удаление", lambda: delete_local_folder(base_path, path)),
+            destructive=True, on_cancel=lambda: set_busy(False),
+        )
 
     def request_sync(row, branch):
         if not can_update_row():
@@ -625,13 +696,21 @@ def run():
             destination = Path(row.local_path)
             action = "Создать локальную ветку" if branch.status == "github" else "Обновить через git pull"
             operation = sync_from_github
+            progress_text = "Создание ветки" if branch.status == "github" else "Мерж (git pull)"
+            button_text = "Создать ветку" if branch.status == "github" else "Обновить"
         else:
             destination = Path(compared[0]).expanduser().absolute() / row.name
             action = "Клонировать репозиторий"
             operation = clone_from_github
-        branch_text = f"\nВетка: {branch.name}" if branch else ""
-        if messagebox.askyesno(action, f"{action}?\n\n{row.name}{branch_text}\n{destination}", parent=root):
-            run_row_action(row, action, lambda: operation(destination, row.github_url, branch))
+            progress_text = "Клонирование"
+            button_text = "Клонировать"
+        branch_line = f"\nВетка: {branch.name}" if branch else ""
+        set_busy(True)
+        confirm_action(
+            root, action, f"{row.name}{branch_line}\n\n{destination}", button_text,
+            lambda: run_row_action(row, progress_text, lambda: operation(destination, row.github_url, branch)),
+            on_cancel=lambda: set_busy(False),
+        )
 
     table = ResultsTable(panel, on_sync=request_sync, on_refresh=request_refresh, on_delete=request_delete)
     table.grid(row=6, column=0, columnspan=3, sticky="nsew", padx=16)
@@ -641,9 +720,13 @@ def run():
     label_widget(status_line, textvariable=status, muted=True, wraplength=680).grid(
         row=0, column=0, sticky="w"
     )
-    loader = ctk.CTkProgressBar(status_line, mode="indeterminate", width=140, fg_color=FIELD, progress_color=ACCENT)
-    loader.grid(row=0, column=1, padx=(12, 0))
-    loader.grid_remove()
+    loader_group = ctk.CTkFrame(status_line, fg_color="transparent")
+    loader_group.grid(row=0, column=1, padx=(12, 0))
+    loader = ctk.CTkProgressBar(loader_group, mode="indeterminate", width=140, fg_color=FIELD, progress_color=ACCENT)
+    loader.pack(side="left")
+    loader_label = label_widget(loader_group, text="")
+    loader_label.pack(side="left", padx=(10, 0))
+    loader_group.grid_remove()
 
     label_widget(panel, text="Двойной щелчок по ссылке откроет репозиторий в браузере.",
               muted=True).grid(row=5, column=0, columnspan=3, sticky="w", padx=16, pady=(5, 5))
@@ -668,11 +751,10 @@ def run():
                 counts[value.status] += 1
                 status.set(f"Проверяем ветки… Обработано репозиториев: {sum(counts.values())}")
                 continue
-            for widget in controls:
-                widget.configure(state="readonly" if widget in (login_input, profile_input) else "normal")
+            loader.stop()
+            loader_group.grid_remove()
+            set_busy(False)
             if kind == "row_updated":
-                loader.stop()
-                loader.grid_remove()
                 previous, updated, error = value
                 if updated is not previous:
                     counts[previous.status] -= 1
@@ -683,7 +765,7 @@ def run():
                         counts[updated.status] += 1
                 if error:
                     status.set(error)
-                    messagebox.showerror("Не удалось завершить действие", error, parent=root)
+                    modal_message("Не удалось завершить действие", error, parent=root)
                     return
             summary = "  ·  ".join(f"{label} — {counts[key]}" for key, (label, _, _) in STATUSES.items())
             status.set(value if kind == "error" else summary)
@@ -698,12 +780,12 @@ def run():
         if not path or not account:
             status.set("Укажите папку и выберите сохранённого пользователя GitHub.")
             return
-        for widget in controls:
-            widget.configure(state="disabled")
+        set_busy(True)
         compared = (path, account)
         table.clear()
         counts.clear()
         status.set("Сравниваем папки с публичными репозиториями…")
+        show_loader("Сравнение")
         Thread(target=load, args=(path, account), daemon=True).start()
         root.after(75, show_results)
 

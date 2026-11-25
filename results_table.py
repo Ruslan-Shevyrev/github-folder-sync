@@ -48,10 +48,11 @@ class ResultsTable(ctk.CTkFrame):
         vertical.grid(row=0, column=1, sticky="ns", padx=2, pady=3)
         horizontal.grid(row=1, column=0, sticky="ew", padx=3, pady=2)
         self.canvas.bind("<MouseWheel>", self.scroll)
-        self.commit_tooltip = None
+        self.tooltip = None
         self.on_sync = on_sync
         self.on_refresh = on_refresh
         self.on_delete = on_delete
+        self.actions_enabled = True
         self.columns = COLUMNS
         self.row_data = {}
         self.item_bindings = {}
@@ -123,7 +124,7 @@ class ResultsTable(ctk.CTkFrame):
         self.canvas.yview_moveto(0)
 
     def reset_canvas(self):
-        self.hide_commit()
+        self.hide_tooltip()
         self.delete_items("all")
         self.canvas.configure(cursor="")
         self.width = sum(width for _, _, width in self.columns)
@@ -155,7 +156,7 @@ class ResultsTable(ctk.CTkFrame):
         old_tag, top, old_bottom, index = self.rows[name]
         view_top = self.canvas.canvasy(0)
         number = self.canvas.itemcget(index, "text")
-        self.hide_commit()
+        self.hide_tooltip()
         self.delete_items(old_tag)
         self.canvas.configure(cursor="")
         if row is None:
@@ -193,10 +194,11 @@ class ResultsTable(ctk.CTkFrame):
             if column == "sync":
                 sync_x = x + 7
             elif column == "refresh" and self.on_refresh is not None:
-                self.draw_button(x + 7, top + 6, "↻", 28, lambda: self.on_refresh(row))
+                self.draw_button(x + 7, top + 6, "↻", 28, lambda: self.on_refresh(row),
+                                 hint="Обновить")
             elif column == "delete" and row.local_path and self.on_delete is not None:
                 self.draw_button(x + 7, top + 6, None, 28, lambda: self.on_delete(row),
-                                 background="#813c51", active="#a24f67", icon=self.draw_trash_icon)
+                                 hint="Удалить", background="#813c51", active="#a24f67", icon=self.draw_trash_icon)
             elif column == "branches":
                 bottom = max(bottom, self.draw_branches(row, x + 8, top + 6, width - 16, sync_x) + 6)
             elif value:
@@ -215,17 +217,18 @@ class ResultsTable(ctk.CTkFrame):
         return tag, bottom + 1, number_item
 
 
-    def hide_commit(self, _event=None):
-        if self.commit_tooltip is not None:
-            self.commit_tooltip.destroy()
-            self.commit_tooltip = None
+    def hide_tooltip(self, _event=None):
+        if self.tooltip is not None:
+            self.tooltip.destroy()
+            self.tooltip = None
 
-    def show_commit(self, event, commit):
-        self.hide_commit()
+    def show_tooltip(self, event, text, *, monospace=False):
+        self.hide_tooltip()
         tooltip = tk.Toplevel(self.canvas, background="#343956")
-        self.commit_tooltip = tooltip
+        self.tooltip = tooltip
         tooltip.wm_overrideredirect(True)
-        ctk.CTkLabel(tooltip, text=commit, font=("Consolas", 12), fg_color="#23283c").pack(padx=6, pady=2)
+        font = ("Consolas" if monospace else "Segoe UI", 12)
+        ctk.CTkLabel(tooltip, text=text, font=font, fg_color="#23283c").pack(padx=6, pady=2)
         tooltip.update_idletasks()
         x = min(event.x_root + 12, tooltip.winfo_screenwidth() - tooltip.winfo_reqwidth())
         y = min(event.y_root + 18, tooltip.winfo_screenheight() - tooltip.winfo_reqheight())
@@ -233,45 +236,75 @@ class ResultsTable(ctk.CTkFrame):
 
     def draw_commit(self, x, y, side, commit, color, width):
         item = self.text(x, y, f"{side} ({commit[:12]})", BRANCH_COLORS[color], width)
-        self.bind_item(item, item, "<Enter>", lambda event: self.show_commit(event, commit))
-        self.bind_item(item, item, "<Leave>", self.hide_commit)
+        self.bind_item(item, item, "<Enter>", lambda event: self.show_tooltip(event, commit, monospace=True))
+        self.bind_item(item, item, "<Leave>", self.hide_tooltip)
         return item
 
-    def draw_trash_icon(self, x, y, tag):
-        self.canvas.create_line(x - 7, y - 4, x + 7, y - 4, fill="#ffffff", tags=tag)
-        self.canvas.create_line(x - 3, y - 4, x - 3, y - 7, x + 3, y - 7, x + 3, y - 4,
-                                fill="#ffffff", tags=tag)
-        self.canvas.create_line(x - 5, y - 2, x - 4, y + 7, x + 4, y + 7, x + 5, y - 2,
-                                fill="#ffffff", tags=tag)
+    def set_actions_enabled(self, enabled):
+        self.actions_enabled = enabled
+        self.canvas.itemconfigure("row-action", state="normal" if enabled else "disabled")
+        if not enabled:
+            self.hide_tooltip()
+            self.canvas.configure(cursor="")
 
-    def draw_button(self, x, y, label, width, command, *, background="#7446ee", active="#865cff", icon=None):
+    def draw_trash_icon(self, x, y, tag):
+        self.canvas.create_line(x - 7, y - 4, x + 7, y - 4, fill="#ffffff", disabledfill="#9297ac", tags=tag)
+        self.canvas.create_line(x - 3, y - 4, x - 3, y - 7, x + 3, y - 7, x + 3, y - 4,
+                                fill="#ffffff", disabledfill="#9297ac", tags=tag)
+        self.canvas.create_line(x - 5, y - 2, x - 4, y + 7, x + 4, y + 7, x + 5, y - 2,
+                                fill="#ffffff", disabledfill="#9297ac", tags=tag)
+
+    def draw_button(self, x, y, label, width, command, *, hint, background="#7446ee",
+                    active="#865cff", icon=None):
         radius = 5
         right, bottom = x + width, y + 23
         button = self.canvas.create_polygon(
             x, y + radius, x, y, x + radius, y, right - radius, y, right, y,
             right, y + radius, right, bottom - radius, right, bottom, right - radius, bottom,
-            x + radius, bottom, x, bottom, x, bottom - radius, smooth=True, fill=background,
+            x + radius, bottom, x, bottom, x, bottom - radius, smooth=True, fill=background, disabledfill="#3b4155",
         )
         tag = f"button-{button}"
         self.canvas.addtag_withtag(tag, button)
         center_x, center_y = x + width / 2, y + 11
         if icon is None:
-            self.canvas.create_text(center_x, center_y, text=label, fill="#ffffff",
+            self.canvas.create_text(center_x, center_y, text=label, fill="#ffffff", disabledfill="#9297ac",
                                     font=("Segoe UI", 10, "bold"), tags=tag)
         else:
             icon(center_x, center_y, tag)
+        self.canvas.addtag_withtag("row-action", tag)
+        if not self.actions_enabled:
+            self.canvas.itemconfigure(tag, state="disabled")
 
         def hover(color, cursor):
             self.canvas.itemconfigure(button, fill=color)
             self.canvas.configure(cursor=cursor)
 
-        self.bind_item(button, tag, "<Enter>", lambda _: hover(active, "hand2"))
-        self.bind_item(button, tag, "<Leave>", lambda _: hover(background, ""))
-        self.bind_item(button, tag, "<Button-1>", lambda _: command())
+        def enter(event):
+            hover(active, "hand2")
+            self.show_tooltip(event, hint)
+
+        def leave(_event):
+            hover(background, "")
+            self.hide_tooltip()
+
+        def click(_event):
+            if self.actions_enabled:
+                self.hide_tooltip()
+                command()
+
+        self.bind_item(button, tag, "<Enter>", enter)
+        self.bind_item(button, tag, "<Leave>", leave)
+        self.bind_item(button, tag, "<Button-1>", click)
         return button
 
     def draw_download(self, row, branch, x, y):
-        return self.draw_button(x, y, "↓", 28, lambda: self.on_sync(row, branch))
+        if not row.local_path:
+            hint = "git clone"
+        elif branch.status == "github":
+            hint = "git fetch — создать локальную ветку"
+        else:
+            hint = "git pull"
+        return self.draw_button(x, y, "↓", 28, lambda: self.on_sync(row, branch), hint=hint)
 
     def draw_branches(self, row, x, y, width, sync_x):
         if not row.local_path and row.github_url and not row.branches and not row.branch_error:
