@@ -1,6 +1,6 @@
 import tkinter as tk
 import webbrowser
-from tkinter import ttk
+import customtkinter as ctk
 
 
 COLUMNS = (
@@ -14,6 +14,9 @@ COLUMNS = (
     ("path", "Локальный путь", 265),
     ("github", "Ссылка на GitHub", 290),
 )
+
+FLEXIBLE_COLUMNS = {"name", "status", "branches", "path", "github"}
+
 
 BRANCH_COLORS = {
     "green": "#83eca4",
@@ -31,44 +34,107 @@ BRANCH_LABELS = {
 }
 
 
-class ResultsTable(ttk.Frame):
+class ResultsTable(ctk.CTkFrame):
     def __init__(self, parent, on_sync=None, on_refresh=None, on_delete=None):
-        super().__init__(parent)
+        super().__init__(parent, fg_color="#101421", border_color="#343a50",
+                         border_width=1, corner_radius=10)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
         self.canvas = tk.Canvas(self, background="#101321", highlightthickness=0)
-        vertical = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        horizontal = ttk.Scrollbar(self, orient="horizontal", command=self.canvas.xview)
+        vertical = ctk.CTkScrollbar(self, orientation="vertical", command=self.canvas.yview)
+        horizontal = ctk.CTkScrollbar(self, orientation="horizontal", command=self.canvas.xview)
         self.canvas.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
-        self.canvas.grid(row=0, column=0, sticky="nsew")
-        vertical.grid(row=0, column=1, sticky="ns")
-        horizontal.grid(row=1, column=0, sticky="ew")
+        self.canvas.grid(row=0, column=0, sticky="nsew", padx=(3, 0), pady=(3, 0))
+        vertical.grid(row=0, column=1, sticky="ns", padx=2, pady=3)
+        horizontal.grid(row=1, column=0, sticky="ew", padx=3, pady=2)
         self.canvas.bind("<MouseWheel>", self.scroll)
         self.commit_tooltip = None
         self.on_sync = on_sync
         self.on_refresh = on_refresh
         self.on_delete = on_delete
+        self.columns = COLUMNS
+        self.row_data = {}
+        self.item_bindings = {}
+        self.resize_job = None
         self.clear()
+        self.canvas.bind("<Configure>", self.schedule_resize)
 
     def scroll(self, event):
         self.canvas.yview_scroll(-int(event.delta / 120), "units")
         return "break"
 
+    def schedule_resize(self, _event):
+        if self.resize_job is not None:
+            self.after_cancel(self.resize_job)
+        self.resize_job = self.after(60, self.resize_columns)
+
+    def resize_columns(self):
+        self.resize_job = None
+        minimum = sum(width for _, _, width in COLUMNS)
+        available = max(minimum, self.canvas.winfo_width())
+        if available == self.width:
+            return
+
+        space = available - minimum
+        weight = sum(width for column, _, width in COLUMNS if column in FLEXIBLE_COLUMNS)
+        columns = []
+        allocated = 0
+        consumed = 0
+        for column, title, width in COLUMNS:
+            if column in FLEXIBLE_COLUMNS:
+                consumed += width
+                target = space * consumed // weight
+                width += target - allocated
+                allocated = target
+            columns.append((column, title, width))
+        self.columns = columns
+
+        left, top = self.canvas.canvasx(0), self.canvas.canvasy(0)
+        anchor = next(
+            ((name, top - row_top) for name, (_, row_top, bottom, _) in self.rows.items()
+             if row_top <= top < bottom),
+            None,
+        )
+        self.reset_canvas()
+        for row, status in self.row_data.values():
+            self.paint_next_row(row, status)
+        self.canvas.configure(scrollregion=(0, 0, self.width, self.bottom))
+        if anchor is not None:
+            name, offset = anchor
+            _, row_top, bottom, _ = self.rows[name]
+            top = min(row_top + offset, bottom - 1)
+        self.canvas.xview_moveto(left / self.width)
+        self.canvas.yview_moveto(top / self.bottom)
+
+    def bind_item(self, item, target, sequence, callback):
+        token = self.canvas.tag_bind(target, sequence, callback)
+        self.item_bindings.setdefault(item, []).append((target, sequence, token))
+
+    def delete_items(self, tag):
+        for item in self.canvas.find_withtag(tag):
+            for target, sequence, token in self.item_bindings.pop(item, ()):
+                self.canvas.tag_unbind(target, sequence, token)
+        self.canvas.delete(tag)
+
     def clear(self):
+        self.row_data.clear()
+        self.reset_canvas()
+        self.canvas.xview_moveto(0)
+        self.canvas.yview_moveto(0)
+
+    def reset_canvas(self):
         self.hide_commit()
-        self.canvas.delete("all")
+        self.delete_items("all")
         self.canvas.configure(cursor="")
-        self.width = sum(width for _, _, width in COLUMNS)
+        self.width = sum(width for _, _, width in self.columns)
         self.bottom = 34
         self.rows = {}
         self.canvas.create_rectangle(0, 0, self.width, self.bottom, fill="#222740", outline="")
         x = 0
-        for _, title, width in COLUMNS:
+        for _, title, width in self.columns:
             self.text(x + 8, 7, title, "#f4f1ff", width - 16, bold=True)
             x += width
         self.canvas.configure(scrollregion=(0, 0, self.width, self.bottom))
-        self.canvas.xview_moveto(0)
-        self.canvas.yview_moveto(0)
 
     def text(self, x, y, label, color, width=None, *, bold=False):
         font = ("Segoe UI", 10, "bold" if bold else "normal")
@@ -76,22 +142,28 @@ class ResultsTable(ttk.Frame):
                                        font=font)
 
     def add(self, row, status):
+        self.row_data[row.name] = (row, status)
+        self.paint_next_row(row, status)
+        self.canvas.configure(scrollregion=(0, 0, self.width, self.bottom))
+
+    def paint_next_row(self, row, status):
         top = self.bottom
         tag, self.bottom, index = self.draw_row(row, status, top, len(self.rows) + 1)
         self.rows[row.name] = (tag, top, self.bottom, index)
-        self.canvas.configure(scrollregion=(0, 0, self.width, self.bottom))
 
     def update_row(self, name, row=None, status=None):
         old_tag, top, old_bottom, index = self.rows[name]
         view_top = self.canvas.canvasy(0)
         number = self.canvas.itemcget(index, "text")
         self.hide_commit()
-        self.canvas.delete(old_tag)
+        self.delete_items(old_tag)
         self.canvas.configure(cursor="")
         if row is None:
+            del self.row_data[name]
             del self.rows[name]
             bottom = top
         else:
+            self.row_data[name] = (row, status)
             tag, bottom, index = self.draw_row(row, status, top, number)
             self.rows[name] = (tag, top, bottom, index)
         delta = bottom - old_bottom
@@ -116,7 +188,7 @@ class ResultsTable(ttk.Frame):
         values = {"number": str(number), "name": row.name, "status": label,
                   "path": row.local_path, "github": row.github_url}
         sync_x = 0
-        for column, _, width in COLUMNS:
+        for column, _, width in self.columns:
             value = values.get(column)
             if column == "sync":
                 sync_x = x + 7
@@ -133,7 +205,7 @@ class ResultsTable(ttk.Frame):
                 if column == "number":
                     number_item = item
                 if column == "github":
-                    self.canvas.tag_bind(item, "<Double-1>", lambda _, url=value: webbrowser.open(url))
+                    self.bind_item(item, item, "<Double-1>", lambda _, url=value: webbrowser.open(url))
             x += width
         self.canvas.coords(backdrop, 0, top, self.width, bottom)
         last_item = self.canvas.create_line(0, bottom, self.width, bottom, fill="#343956")
@@ -153,7 +225,7 @@ class ResultsTable(ttk.Frame):
         tooltip = tk.Toplevel(self.canvas, background="#343956")
         self.commit_tooltip = tooltip
         tooltip.wm_overrideredirect(True)
-        ttk.Label(tooltip, text=commit, padding=(8, 4)).pack(padx=1, pady=1)
+        ctk.CTkLabel(tooltip, text=commit, font=("Consolas", 12), fg_color="#23283c").pack(padx=6, pady=2)
         tooltip.update_idletasks()
         x = min(event.x_root + 12, tooltip.winfo_screenwidth() - tooltip.winfo_reqwidth())
         y = min(event.y_root + 18, tooltip.winfo_screenheight() - tooltip.winfo_reqheight())
@@ -161,8 +233,8 @@ class ResultsTable(ttk.Frame):
 
     def draw_commit(self, x, y, side, commit, color, width):
         item = self.text(x, y, f"{side} ({commit[:12]})", BRANCH_COLORS[color], width)
-        self.canvas.tag_bind(item, "<Enter>", lambda event: self.show_commit(event, commit))
-        self.canvas.tag_bind(item, "<Leave>", self.hide_commit)
+        self.bind_item(item, item, "<Enter>", lambda event: self.show_commit(event, commit))
+        self.bind_item(item, item, "<Leave>", self.hide_commit)
         return item
 
     def draw_trash_icon(self, x, y, tag):
@@ -173,7 +245,13 @@ class ResultsTable(ttk.Frame):
                                 fill="#ffffff", tags=tag)
 
     def draw_button(self, x, y, label, width, command, *, background="#7446ee", active="#865cff", icon=None):
-        button = self.canvas.create_rectangle(x, y, x + width, y + 23, fill=background, outline="")
+        radius = 5
+        right, bottom = x + width, y + 23
+        button = self.canvas.create_polygon(
+            x, y + radius, x, y, x + radius, y, right - radius, y, right, y,
+            right, y + radius, right, bottom - radius, right, bottom, right - radius, bottom,
+            x + radius, bottom, x, bottom, x, bottom - radius, smooth=True, fill=background,
+        )
         tag = f"button-{button}"
         self.canvas.addtag_withtag(tag, button)
         center_x, center_y = x + width / 2, y + 11
@@ -187,9 +265,9 @@ class ResultsTable(ttk.Frame):
             self.canvas.itemconfigure(button, fill=color)
             self.canvas.configure(cursor=cursor)
 
-        self.canvas.tag_bind(tag, "<Enter>", lambda _: hover(active, "hand2"))
-        self.canvas.tag_bind(tag, "<Leave>", lambda _: hover(background, ""))
-        self.canvas.tag_bind(tag, "<Button-1>", lambda _: command())
+        self.bind_item(button, tag, "<Enter>", lambda _: hover(active, "hand2"))
+        self.bind_item(button, tag, "<Leave>", lambda _: hover(background, ""))
+        self.bind_item(button, tag, "<Button-1>", lambda _: command())
         return button
 
     def draw_download(self, row, branch, x, y):

@@ -27,10 +27,11 @@
 Запустите из папки проекта с помощью Python 3 с Tkinter.
 
 ```powershell
-python synhronized-githab-and-folder.py
+python -m pip install -r requirements.txt
+python github_folder_sync.py
 ```
 
-`synhronized-githab-and-folder.py` запускает приложение. `gui.py` и `results_table.py` отвечают за интерфейс. `comparison.py` сравнивает папки с репозиториями, а `branches.py` проверяет ветки.
+`github_folder_sync.py` запускает приложение. `gui.py` и `results_table.py` отвечают за интерфейс. `comparison.py` сравнивает папки с репозиториями, а `branches.py` проверяет ветки.
 
 ## Сборка для Windows x64
 

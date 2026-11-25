@@ -6,6 +6,8 @@ from threading import Thread
 from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
 
+import customtkinter as ctk
+
 from branches import BranchError
 from comparison import compare, delete_local_folder, refresh_repository, validate_login, with_branches
 from git_sync import clone_from_github, sync_from_github
@@ -20,17 +22,50 @@ STATUSES = {
 }
 
 
+BACKGROUND = "#111522"
+PANEL = "#191e2f"
+FIELD = "#23283c"
+BORDER = "#42495f"
+TEXT = "#f4f2fb"
+MUTED = "#b9bdd1"
+ACCENT = "#7446ee"
+FONT = ("Segoe UI", 13)
+
+
+def button_widget(parent, *, primary=False, **options):
+    return ctk.CTkButton(
+        parent, font=FONT, text_color=TEXT, text_color_disabled="#9398ad",
+        fg_color=ACCENT if primary else FIELD, hover_color="#895dff" if primary else "#353d55",
+        border_width=0 if primary else 1, border_color=BORDER, corner_radius=8,
+        width=110, height=34, **options
+    )
+
+
+def entry_widget(parent, **options):
+    return ctk.CTkEntry(parent, font=FONT, text_color=TEXT, fg_color=FIELD, border_color=BORDER,
+                        border_width=1, corner_radius=8, height=34, **options)
+
+
+def combo_widget(parent, **options):
+    return ctk.CTkComboBox(
+        parent, font=FONT, dropdown_font=FONT, text_color=TEXT, fg_color=FIELD, border_color=BORDER,
+        button_color=FIELD, button_hover_color="#353d55", dropdown_fg_color=FIELD,
+        dropdown_hover_color="#353d55", dropdown_text_color=TEXT,
+        border_width=1, corner_radius=8, height=34, state="readonly", **options
+    )
+
+
+def label_widget(parent, *, heading=False, muted=False, **options):
+    return ctk.CTkLabel(
+        parent, font=("Segoe UI", 21, "bold") if heading else FONT,
+        text_color=MUTED if muted else TEXT, **options
+    )
+
+
 def configure_theme(root):
-    root.configure(background="#101321")
     style = ttk.Style(root)
     style.theme_use("clam")
     style.configure(".", background="#191d30", foreground="#f4f1ff", font=("Segoe UI", 10))
-    style.configure("Panel.TFrame", borderwidth=1, relief="solid", bordercolor="#343956")
-    style.configure("Heading.TLabel", font=("Segoe UI", 13, "bold"))
-    style.configure("Status.TLabel", foreground="#b8b5d0")
-    style.configure("TEntry", fieldbackground="#222740", insertcolor="#f4f1ff",
-                    bordercolor="#343956", lightcolor="#222740", darkcolor="#222740", padding=(9, 7))
-    style.map("TEntry", fieldbackground=[("readonly", "#222740")])
     style.configure("Treeview", background="#101321", fieldbackground="#101321",
                     foreground="#f4f1ff", rowheight=27)
     style.configure("Treeview.Heading", background="#222740", foreground="#f4f1ff",
@@ -39,22 +74,6 @@ def configure_theme(root):
               foreground=[("pressed", "#f4f1ff"), ("active", "#f4f1ff")])
     style.map("Treeview", background=[("selected", "#513ca0")],
               foreground=[("selected", "#ffffff")])
-    style.configure("TCombobox", fieldbackground="#222740", arrowcolor="#f4f1ff", padding=(9, 6))
-    style.map("TCombobox", fieldbackground=[("readonly", "#222740")],
-              foreground=[("readonly", "#f4f1ff")])
-    root.option_add("*TCombobox*Listbox.background", "#222740")
-    root.option_add("*TCombobox*Listbox.foreground", "#f4f1ff")
-    style.configure("TCheckbutton", background="#191d30", indicatorbackground="#222740",
-                    indicatorbordercolor="#777d9a", indicatorforeground="#f4f1ff")
-    style.map("TCheckbutton", background=[("active", "#191d30")],
-              indicatorbackground=[("selected", "#7446ee"), ("active", "#343052")])
-    style.configure("TButton", background="#222740", bordercolor="#343956", padding=(10, 7))
-    style.map("TButton", background=[("active", "#343052")], foreground=[("disabled", "#9591ac")])
-    style.configure("Accent.TButton", background="#7446ee", bordercolor="#7446ee",
-                    padding=(16, 7), font=("Segoe UI", 10, "bold"))
-    style.map("Accent.TButton", background=[("disabled", "#222740"), ("active", "#865cff")])
-    for orientation in ("Vertical", "Horizontal"):
-        style.configure(f"{orientation}.TScrollbar", background="#343956", troughcolor="#191d30")
 
 
 WINDOWS_EDIT_SHORTCUTS = {
@@ -74,13 +93,13 @@ def edit_shortcut_on_windows(event):
 
 
 def create_dialog(parent, title, *, resizable=False):
-    dialog = tk.Toplevel(parent, background="#101321")
+    dialog = ctk.CTkToplevel(parent, fg_color=PANEL)
     dialog.withdraw()
     dialog.title(title)
     dialog.transient(parent)
     dialog.resizable(resizable, resizable)
-    frame = ttk.Frame(dialog, padding=16)
-    frame.pack(fill="both", expand=True)
+    frame = ctk.CTkFrame(dialog, fg_color="transparent")
+    frame.pack(fill="both", expand=True, padx=16, pady=16)
     return dialog, frame
 
 
@@ -105,21 +124,21 @@ def show_dialog(dialog, focus):
 
 
 def dialog_entry(frame, value="", *, readonly=False):
-    entry = ttk.Entry(frame, width=48)
+    entry = entry_widget(frame, width=350)
     entry.insert(0, value)
     if readonly:
-        entry.state(["readonly"])
+        entry.configure(state="readonly")
     if frame.tk.call("tk", "windowingsystem") == "win32":
         entry.bind("<Control-KeyPress>", edit_shortcut_on_windows)
     return entry
 
 
 def dialog_actions(dialog, frame, row, focus, save):
-    actions = ttk.Frame(frame)
+    actions = ctk.CTkFrame(frame, fg_color="transparent")
     actions.grid(row=row, column=0, columnspan=3, sticky="e")
-    cancel = ttk.Button(actions, text="Отмена")
+    cancel = button_widget(actions, text="Отмена")
     cancel.pack(side="left", padx=(0, 6))
-    save_button = ttk.Button(actions, text="Сохранить", style="Accent.TButton")
+    save_button = button_widget(actions, text="Сохранить", primary=True)
     save_button.pack(side="left")
     close = show_dialog(dialog, focus)
     cancel.configure(command=close)
@@ -139,7 +158,7 @@ def dialog_actions(dialog, frame, row, focus, save):
 def user_dialog(parent, on_save, *, login=""):
     title = "Редактирование пользователя" if login else "Добавить пользователя"
     dialog, frame = create_dialog(parent, title)
-    ttk.Label(frame, text="Логин GitHub").grid(row=0, column=0, sticky="w")
+    label_widget(frame, text="Логин GitHub").grid(row=0, column=0, sticky="w")
     entry = dialog_entry(frame, login)
     entry.grid(row=1, column=0, sticky="ew", pady=(6, 10))
     dialog_actions(dialog, frame, 2, entry, lambda: on_save(entry.get().strip()))
@@ -152,7 +171,7 @@ def profile_dialog(parent, profile, on_save, *, users=(), name="", is_default=Fa
     name_input = dialog_entry(frame, name)
     path_input = dialog_entry(frame, profile["folder"], readonly=not editing)
     if editing:
-        account_input = ttk.Combobox(frame, state="readonly", values=sorted(users, key=str.casefold))
+        account_input = combo_widget(frame, values=sorted(users, key=str.casefold))
         account_input.set(profile["login"])
     else:
         account_input = dialog_entry(frame, profile["login"], readonly=True)
@@ -161,7 +180,7 @@ def profile_dialog(parent, profile, on_save, *, users=(), name="", is_default=Fa
         ("Пользователь GitHub", account_input),
         ("Локальная папка", path_input),
     )):
-        ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
+        label_widget(frame, text=label).grid(row=row, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
         field.grid(row=row, column=1, sticky="ew", pady=(0, 8))
 
     if editing:
@@ -171,10 +190,10 @@ def profile_dialog(parent, profile, on_save, *, users=(), name="", is_default=Fa
                 path_input.delete(0, "end")
                 path_input.insert(0, path)
 
-        ttk.Button(frame, text="Обзор…", command=browse).grid(row=2, column=2, padx=(8, 0), pady=(0, 8))
+        button_widget(frame, text="Обзор…", command=browse).grid(row=2, column=2, padx=(8, 0), pady=(0, 8))
 
     default = tk.BooleanVar(master=dialog, value=is_default)
-    ttk.Checkbutton(frame, text="Настройки по умолчанию", variable=default).grid(
+    ctk.CTkCheckBox(frame, font=FONT, fg_color=ACCENT, hover_color="#895dff", border_color=BORDER, text_color=TEXT, text="Настройки по умолчанию", variable=default).grid(
         row=3, column=1, sticky="w", pady=(0, 10)
     )
     dialog_actions(dialog, frame, 4, name_input, lambda: on_save(
@@ -183,11 +202,10 @@ def profile_dialog(parent, profile, on_save, *, users=(), name="", is_default=Fa
 
 
 def run():
-    root = tk.Tk()
+    ctk.set_appearance_mode("dark")
+    root = ctk.CTk(fg_color=BACKGROUND)
     root.title("Папки и репозитории GitHub")
     root.geometry("1080x560")
-    if root.tk.call("tk", "windowingsystem") == "win32":
-        root.state("zoomed")
     root.minsize(760, 360)
     configure_theme(root)
 
@@ -205,24 +223,25 @@ def run():
     counts = Counter()
     compared = None
 
-    panel = ttk.Frame(root, style="Panel.TFrame", padding=16)
+    panel = ctk.CTkFrame(root, fg_color=PANEL, corner_radius=12, border_width=1, border_color="#30374d")
     panel.pack(fill="both", expand=True, padx=12, pady=12)
+    panel.grid_propagate(False)
     panel.columnconfigure(1, weight=1)
     panel.rowconfigure(6, weight=1)
-    ttk.Label(panel, text="Публичные репозитории GitHub", style="Heading.TLabel").grid(
-        row=0, column=0, columnspan=3, sticky="w", pady=(0, 14)
+    label_widget(panel, text="Публичные репозитории GitHub", heading=True).grid(
+        row=0, column=0, columnspan=3, sticky="w", padx=(16, 0), pady=(14, 12)
     )
-    ttk.Label(panel, text="Пользователь GitHub").grid(row=1, column=0, sticky="w")
-    login_input = ttk.Combobox(panel, textvariable=login, state="readonly")
+    label_widget(panel, text="Пользователь GitHub").grid(row=1, column=0, sticky="w", padx=(16, 4))
+    login_input = combo_widget(panel, variable=login, values=[])
     login_input.grid(row=1, column=1, sticky="ew", padx=8)
-    ttk.Label(panel, text="Локальная папка").grid(row=2, column=0, sticky="w")
-    folder_input = ttk.Entry(panel, textvariable=folder)
+    label_widget(panel, text="Локальная папка").grid(row=2, column=0, sticky="w", padx=(16, 4))
+    folder_input = entry_widget(panel, textvariable=folder)
     folder_input.grid(row=2, column=1, sticky="ew", padx=8, pady=8)
     if root.tk.call("tk", "windowingsystem") == "win32":
         folder_input.bind("<Control-KeyPress>", edit_shortcut_on_windows)
 
-    ttk.Label(panel, text="Профиль").grid(row=3, column=0, sticky="w")
-    profile_input = ttk.Combobox(panel, textvariable=profile_name, state="readonly")
+    label_widget(panel, text="Профиль").grid(row=3, column=0, sticky="w", padx=(16, 4))
+    profile_input = combo_widget(panel, variable=profile_name, values=[])
     profile_input.grid(row=3, column=1, sticky="ew", padx=8)
 
     def refresh_choices():
@@ -264,17 +283,17 @@ def run():
         table = ttk.Treeview(frame, columns=("login",), show="headings", selectmode="browse", height=8)
         table.heading("login", text="Пользователь GitHub", anchor="w")
         table.column("login", width=360, minwidth=180)
-        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=table.yview)
+        scrollbar = ctk.CTkScrollbar(frame, orientation="vertical", command=table.yview)
         table.configure(yscrollcommand=scrollbar.set)
         table.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
-        actions = ttk.Frame(frame)
+        actions = ctk.CTkFrame(frame, fg_color="transparent")
         actions.grid(row=1, column=0, sticky="ew", pady=(10, 0))
 
         def update_actions(_event=None):
-            state = ["!disabled"] if table.selection() else ["disabled"]
-            edit_button.state(state)
-            delete_button.state(state)
+            state = "normal" if table.selection() else "disabled"
+            edit_button.configure(state=state)
+            delete_button.configure(state=state)
 
         def refresh(selected):
             table.delete(*table.get_children())
@@ -357,11 +376,11 @@ def run():
                 table.selection_set(item)
                 edit()
 
-        edit_button = ttk.Button(actions, text="Редактировать", command=edit)
+        edit_button = button_widget(actions, text="Редактировать", command=edit)
         edit_button.pack(side="left")
-        delete_button = ttk.Button(actions, text="Удалить", command=delete)
+        delete_button = button_widget(actions, text="Удалить", command=delete)
         delete_button.pack(side="left", padx=6)
-        close_button = ttk.Button(actions, text="Закрыть")
+        close_button = button_widget(actions, text="Закрыть")
         close_button.pack(side="right")
         table.bind("<<TreeviewSelect>>", update_actions)
         table.bind("<Double-1>", edit_row)
@@ -434,13 +453,13 @@ def run():
         for column, label, width in columns:
             table.heading(column, text=label, anchor="w")
             table.column(column, width=width, minwidth=width, stretch=column == "folder")
-        vertical = ttk.Scrollbar(frame, orient="vertical", command=table.yview)
-        horizontal = ttk.Scrollbar(frame, orient="horizontal", command=table.xview)
+        vertical = ctk.CTkScrollbar(frame, orientation="vertical", command=table.yview)
+        horizontal = ctk.CTkScrollbar(frame, orientation="horizontal", command=table.xview)
         table.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
         table.grid(row=0, column=0, sticky="nsew")
         vertical.grid(row=0, column=1, sticky="ns")
         horizontal.grid(row=1, column=0, sticky="ew")
-        actions = ttk.Frame(frame)
+        actions = ctk.CTkFrame(frame, fg_color="transparent")
         actions.grid(row=2, column=0, sticky="ew", pady=(10, 0))
 
         def refresh(selected=None):
@@ -456,9 +475,9 @@ def run():
             update_actions()
 
         def update_actions(_event=None):
-            state = ["!disabled"] if table.selection() else ["disabled"]
-            edit_button.state(state)
-            delete_button.state(state)
+            state = "normal" if table.selection() else "disabled"
+            edit_button.configure(state=state)
+            delete_button.configure(state=state)
 
         def edit():
             selection = table.selection()
@@ -500,11 +519,11 @@ def run():
             refresh()
             status.set(f"Профиль «{name}» удалён.")
 
-        edit_button = ttk.Button(actions, text="Редактировать", command=edit)
+        edit_button = button_widget(actions, text="Редактировать", command=edit)
         edit_button.pack(side="left")
-        delete_button = ttk.Button(actions, text="Удалить", command=delete)
+        delete_button = button_widget(actions, text="Удалить", command=delete)
         delete_button.pack(side="left", padx=6)
-        close_button = ttk.Button(actions, text="Закрыть")
+        close_button = button_widget(actions, text="Закрыть")
         close_button.pack(side="right")
         table.bind("<<TreeviewSelect>>", update_actions)
 
@@ -518,17 +537,17 @@ def run():
         refresh(profile_name.get())
         close_button.configure(command=show_dialog(dialog, table))
 
-    add_button = ttk.Button(panel, text="Добавить пользователя", command=lambda: user_dialog(root, add_user))
-    add_button.grid(row=1, column=2, sticky="ew")
-    save_button = ttk.Button(panel, text="Сохранить", command=open_profile_dialog)
-    save_button.grid(row=3, column=2, sticky="ew")
-    navigation = ttk.Frame(panel)
+    add_button = button_widget(panel, text="Добавить пользователя", command=lambda: user_dialog(root, add_user))
+    add_button.grid(row=1, column=2, sticky="ew", padx=(0, 16))
+    save_button = button_widget(panel, text="Сохранить", command=open_profile_dialog)
+    save_button.grid(row=3, column=2, sticky="ew", padx=(0, 16))
+    navigation = ctk.CTkFrame(panel, fg_color="transparent")
     navigation.grid(row=4, column=1, sticky="e", padx=8, pady=(8, 0))
-    users_button = ttk.Button(navigation, text="Просмотр пользователей", command=open_users)
+    users_button = button_widget(navigation, text="Просмотр пользователей", command=open_users)
     users_button.pack(side="left", padx=(0, 6))
-    profiles_button = ttk.Button(navigation, text="Просмотр профилей", command=open_profiles)
+    profiles_button = button_widget(navigation, text="Просмотр профилей", command=open_profiles)
     profiles_button.pack(side="left")
-    profile_input.bind("<<ComboboxSelected>>", apply_profile)
+    profile_input.configure(command=apply_profile)
     refresh_choices()
     if preferences["default_profile"]:
         profile_name.set(preferences["default_profile"])
@@ -539,11 +558,11 @@ def run():
         if selected:
             folder.set(selected)
 
-    browse = ttk.Button(panel, text="Обзор…", command=choose_folder)
-    browse.grid(row=2, column=2, sticky="ew")
+    browse = button_widget(panel, text="Обзор…", command=choose_folder)
+    browse.grid(row=2, column=2, sticky="ew", padx=(0, 16))
 
     def can_update_row():
-        if button.instate(["disabled"]):
+        if button.cget("state") == "disabled":
             return False
         if compared != (folder.get().strip(), login.get()):
             messagebox.showinfo("Сравнение устарело", "Сначала повторите сравнение для выбранных настроек.",
@@ -554,10 +573,10 @@ def run():
     def run_row_action(row, action, operation=None):
         base_path, account = compared
         for widget in controls:
-            widget.state(["disabled"])
+            widget.configure(state="disabled")
         status.set(f"{action}… {row.name}")
         loader.grid()
-        loader.start(12)
+        loader.start()
 
         def worker():
             errors = []
@@ -615,19 +634,19 @@ def run():
             run_row_action(row, action, lambda: operation(destination, row.github_url, branch))
 
     table = ResultsTable(panel, on_sync=request_sync, on_refresh=request_refresh, on_delete=request_delete)
-    table.grid(row=6, column=0, columnspan=3, sticky="nsew")
-    status_line = ttk.Frame(panel)
-    status_line.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+    table.grid(row=6, column=0, columnspan=3, sticky="nsew", padx=16)
+    status_line = ctk.CTkFrame(panel, fg_color="transparent")
+    status_line.grid(row=7, column=0, columnspan=3, sticky="ew", padx=16, pady=(8, 12))
     status_line.columnconfigure(0, weight=1)
-    ttk.Label(status_line, textvariable=status, style="Status.TLabel", wraplength=680).grid(
+    label_widget(status_line, textvariable=status, muted=True, wraplength=680).grid(
         row=0, column=0, sticky="w"
     )
-    loader = ttk.Progressbar(status_line, orient="horizontal", mode="indeterminate", length=140)
+    loader = ctk.CTkProgressBar(status_line, mode="indeterminate", width=140, fg_color=FIELD, progress_color=ACCENT)
     loader.grid(row=0, column=1, padx=(12, 0))
     loader.grid_remove()
 
-    ttk.Label(panel, text="Двойной щелчок по ссылке откроет репозиторий в браузере.",
-              style="Status.TLabel").grid(row=5, column=0, columnspan=3, sticky="w", pady=(5, 8))
+    label_widget(panel, text="Двойной щелчок по ссылке откроет репозиторий в браузере.",
+              muted=True).grid(row=5, column=0, columnspan=3, sticky="w", padx=16, pady=(5, 5))
 
     def load(path, account):
         try:
@@ -650,7 +669,7 @@ def run():
                 status.set(f"Проверяем ветки… Обработано репозиториев: {sum(counts.values())}")
                 continue
             for widget in controls:
-                widget.state(["!disabled"])
+                widget.configure(state="readonly" if widget in (login_input, profile_input) else "normal")
             if kind == "row_updated":
                 loader.stop()
                 loader.grid_remove()
@@ -673,14 +692,14 @@ def run():
 
     def submit():
         nonlocal compared
-        if button.instate(["disabled"]):
+        if button.cget("state") == "disabled":
             return
         path, account = folder.get().strip(), login.get()
         if not path or not account:
             status.set("Укажите папку и выберите сохранённого пользователя GitHub.")
             return
         for widget in controls:
-            widget.state(["disabled"])
+            widget.configure(state="disabled")
         compared = (path, account)
         table.clear()
         counts.clear()
@@ -688,9 +707,17 @@ def run():
         Thread(target=load, args=(path, account), daemon=True).start()
         root.after(75, show_results)
 
-    button = ttk.Button(panel, text="Сравнить", style="Accent.TButton", command=submit)
-    button.grid(row=4, column=2, sticky="ew", pady=(8, 0))
+    button = button_widget(panel, text="Сравнить", primary=True, command=submit)
+    button.grid(row=4, column=2, sticky="ew", padx=(0, 16), pady=(8, 0))
     controls = (folder_input, login_input, profile_input, browse, add_button, save_button, profiles_button, users_button, button)
     root.bind("<Return>", lambda _event: submit())
     login_input.focus_set()
+    if root.tk.call("tk", "windowingsystem") == "win32":
+        def maximize_on_map(event):
+            if event.widget is root:
+                root.unbind("<Map>", startup_binding)
+                root.after_idle(root.state, "zoomed")
+
+        # CustomTkinter restores the window while setting up the Windows title bar.
+        startup_binding = root.bind("<Map>", maximize_on_map, add="+")
     root.mainloop()

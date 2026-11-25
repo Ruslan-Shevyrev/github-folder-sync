@@ -18,14 +18,14 @@ try {
     & $venvPython -c "import sysconfig; raise SystemExit(sysconfig.get_platform() != 'win-amd64')"
     if ($LASTEXITCODE -ne 0) { throw 'The Windows x64 build requires x64 Python.' }
 
-    & $venvPython -m pip install pyinstaller
-    if ($LASTEXITCODE -ne 0) { throw 'Could not install PyInstaller.' }
+    & $venvPython -m pip install -r requirements.txt pyinstaller
+    if ($LASTEXITCODE -ne 0) { throw 'Could not install the application or build dependencies.' }
 
     if (Test-Path -LiteralPath $settingsFile -PathType Leaf) {
         $settingsBackup = [IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $settingsFile))
     }
 
-    & $venvPython -m PyInstaller --onedir --windowed --noconfirm --name GitHubFolderComparison --specpath build github_folder_sync.py
+    & $venvPython -m PyInstaller --onedir --windowed --noconfirm --name GitHubFolderComparison --specpath build --collect-data customtkinter github_folder_sync.py
     if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed.' }
 
     Write-Host 'Application: dist\GitHubFolderComparison\GitHubFolderComparison.exe'
