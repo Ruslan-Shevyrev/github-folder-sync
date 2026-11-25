@@ -1,11 +1,14 @@
 import tkinter as tk
 from collections import Counter
+from dataclasses import replace
 from queue import Empty, Queue
 from threading import Thread
 from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
 
-from comparison import compare, validate_login, with_branches
+from branches import BranchError
+from comparison import compare, delete_local_folder, refresh_repository, validate_login, with_branches
+from git_sync import clone_from_github, sync_from_github
 from settings import load_settings, save_settings, settings_path
 from results_table import ResultsTable
 
@@ -183,6 +186,8 @@ def run():
     root = tk.Tk()
     root.title("Папки и репозитории GitHub")
     root.geometry("1080x560")
+    if root.tk.call("tk", "windowingsystem") == "win32":
+        root.state("zoomed")
     root.minsize(760, 360)
     configure_theme(root)
 
@@ -198,6 +203,7 @@ def run():
         status.set(f"Не удалось прочитать настройки: {error}")
     results = Queue()
     counts = Counter()
+    compared = None
 
     panel = ttk.Frame(root, style="Panel.TFrame", padding=16)
     panel.pack(fill="both", expand=True, padx=12, pady=12)
@@ -536,11 +542,89 @@ def run():
     browse = ttk.Button(panel, text="Обзор…", command=choose_folder)
     browse.grid(row=2, column=2, sticky="ew")
 
-    table = ResultsTable(panel)
+    def can_update_row():
+        if button.instate(["disabled"]):
+            return False
+        if compared != (folder.get().strip(), login.get()):
+            messagebox.showinfo("Сравнение устарело", "Сначала повторите сравнение для выбранных настроек.",
+                                parent=root)
+            return False
+        return True
+
+    def run_row_action(row, action, operation=None):
+        base_path, account = compared
+        for widget in controls:
+            widget.state(["disabled"])
+        status.set(f"{action}… {row.name}")
+        loader.grid()
+        loader.start(12)
+
+        def worker():
+            errors = []
+            if operation is not None:
+                try:
+                    operation()
+                except (BranchError, OSError, ValueError) as error:
+                    errors.append(str(error))
+            try:
+                updated = refresh_repository(base_path, account, row.name)
+            except (OSError, ValueError, TypeError, KeyError) as error:
+                errors.append(str(error))
+                updated = row
+                if operation is not None:
+                    candidate = Path(base_path).expanduser().absolute() / row.name
+                    local_path = str(candidate) if candidate.is_dir() else ""
+                    updated = replace(row, local_path=local_path, branches=(),
+                                      branch_error="Не удалось перепроверить ветки.")
+                    if not updated.local_path and not updated.github_url:
+                        updated = None
+            results.put(("row_updated", (row, updated, "\n".join(errors))))
+
+        Thread(target=worker, daemon=True).start()
+        root.after(75, show_results)
+
+    def request_refresh(row):
+        if can_update_row():
+            run_row_action(row, "Обновляем строку")
+
+    def request_delete(row):
+        if not can_update_row() or not row.local_path:
+            return
+        path = Path(row.local_path)
+        if messagebox.askyesno(
+            "Удаление локальной папки",
+            f"Удалить папку безвозвратно, включая все файлы и локальные коммиты?\n\n{path}",
+            parent=root, icon="warning", default="no",
+        ):
+            base_path = compared[0]
+            run_row_action(row, "Удаляем локальную папку", lambda: delete_local_folder(base_path, path))
+
+    def request_sync(row, branch):
+        if not can_update_row():
+            return
+        if row.local_path:
+            destination = Path(row.local_path)
+            action = "Создать локальную ветку" if branch.status == "github" else "Обновить через git pull"
+            operation = sync_from_github
+        else:
+            destination = Path(compared[0]).expanduser().absolute() / row.name
+            action = "Клонировать репозиторий"
+            operation = clone_from_github
+        branch_text = f"\nВетка: {branch.name}" if branch else ""
+        if messagebox.askyesno(action, f"{action}?\n\n{row.name}{branch_text}\n{destination}", parent=root):
+            run_row_action(row, action, lambda: operation(destination, row.github_url, branch))
+
+    table = ResultsTable(panel, on_sync=request_sync, on_refresh=request_refresh, on_delete=request_delete)
     table.grid(row=6, column=0, columnspan=3, sticky="nsew")
-    ttk.Label(panel, textvariable=status, style="Status.TLabel", wraplength=680).grid(
-        row=7, column=0, columnspan=3, sticky="w", pady=(10, 0)
+    status_line = ttk.Frame(panel)
+    status_line.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+    status_line.columnconfigure(0, weight=1)
+    ttk.Label(status_line, textvariable=status, style="Status.TLabel", wraplength=680).grid(
+        row=0, column=0, sticky="w"
     )
+    loader = ttk.Progressbar(status_line, orient="horizontal", mode="indeterminate", length=140)
+    loader.grid(row=0, column=1, padx=(12, 0))
+    loader.grid_remove()
 
     ttk.Label(panel, text="Двойной щелчок по ссылке откроет репозиторий в браузере.",
               style="Status.TLabel").grid(row=5, column=0, columnspan=3, sticky="w", pady=(5, 8))
@@ -567,12 +651,28 @@ def run():
                 continue
             for widget in controls:
                 widget.state(["!disabled"])
+            if kind == "row_updated":
+                loader.stop()
+                loader.grid_remove()
+                previous, updated, error = value
+                if updated is not previous:
+                    counts[previous.status] -= 1
+                    if updated is None:
+                        table.update_row(previous.name)
+                    else:
+                        table.update_row(previous.name, updated, STATUSES[updated.status])
+                        counts[updated.status] += 1
+                if error:
+                    status.set(error)
+                    messagebox.showerror("Не удалось завершить действие", error, parent=root)
+                    return
             summary = "  ·  ".join(f"{label} — {counts[key]}" for key, (label, _, _) in STATUSES.items())
             status.set(value if kind == "error" else summary)
             return
         root.after(75, show_results)
 
     def submit():
+        nonlocal compared
         if button.instate(["disabled"]):
             return
         path, account = folder.get().strip(), login.get()
@@ -581,6 +681,7 @@ def run():
             return
         for widget in controls:
             widget.state(["disabled"])
+        compared = (path, account)
         table.clear()
         counts.clear()
         status.set("Сравниваем папки с публичными репозиториями…")

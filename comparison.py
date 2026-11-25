@@ -1,9 +1,12 @@
 import json
 import os
 import re
+import shutil
+import stat
 from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from branches import Branch, BranchError, compare_branches
@@ -29,33 +32,87 @@ def validate_login(login):
         raise ValueError("Введите логин GitHub, например octocat.")
 
 
+def github_json(url, *, allow_missing=False):
+    request = Request(url, headers={
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "GitHubFolderComparison",
+    })
+    try:
+        with urlopen(request, timeout=15) as response:
+            return json.load(response), response.headers.get("Link", "")
+    except HTTPError as error:
+        if error.code == 404 and allow_missing:
+            return None, ""
+        if error.code == 429 or (
+            error.code == 403 and error.headers.get("X-RateLimit-Remaining") == "0"
+        ):
+            raise ValueError("Достигнут лимит запросов GitHub. Попробуйте позже.") from error
+        raise ValueError(f"GitHub вернул ошибку HTTP {error.code}.") from error
+    except (URLError, TimeoutError, OSError) as error:
+        raise ValueError("Не удалось загрузить репозитории. Проверьте подключение к GitHub.") from error
+
+
 def public_repositories(login):
     validate_login(login)
     url = f"https://api.github.com/users/{login}/repos?type=owner&sort=full_name&per_page=100"
     repositories = {}
     while url:
-        request = Request(url, headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "GitHubFolderComparison",
-        })
-        try:
-            with urlopen(request, timeout=15) as response:
-                for repo in json.load(response):
-                    repositories[repo["name"]] = repo["html_url"]
-                link = response.headers.get("Link", "")
-        except HTTPError as error:
-            if error.code == 404:
-                raise ValueError(f"Аккаунт GitHub «{login}» не найден.") from error
-            if error.code == 429 or (
-                error.code == 403 and error.headers.get("X-RateLimit-Remaining") == "0"
-            ):
-                raise ValueError("Достигнут лимит запросов GitHub. Попробуйте позже.") from error
-            raise ValueError(f"GitHub вернул ошибку HTTP {error.code}.") from error
-        except (URLError, TimeoutError, OSError) as error:
-            raise ValueError("Не удалось загрузить репозитории. Проверьте подключение к GitHub.") from error
+        page, link = github_json(url, allow_missing=not repositories)
+        if page is None:
+            raise ValueError(f"Аккаунт GitHub «{login}» не найден.")
+        repositories.update((repo["name"], repo["html_url"]) for repo in page)
         next_page = re.search(r'<(https://api\.github\.com/[^>]+)>;\s*rel="next"', link)
         url = next_page.group(1) if next_page else None
     return repositories
+
+
+def refresh_repository(folder, login, name):
+    validate_login(login)
+    root = Path(folder).expanduser().absolute()
+    if not root.is_dir():
+        raise ValueError(f"Локальная папка «{root}» недоступна.")
+    candidate = root / name
+    local_path = str(candidate) if candidate.is_dir() else ""
+    repo, _ = github_json(f"https://api.github.com/repos/{login}/{quote(name, safe='')}", allow_missing=True)
+    github_url = ""
+    if (
+        repo and repo["visibility"] == "public"
+        and repo["owner"]["login"].casefold() == login.casefold()
+        and repo["name"].casefold() == name.casefold()
+    ):
+        github_url = repo["html_url"]
+    if local_path or github_url:
+        return with_branches(Match(name, local_path, github_url))
+
+
+def delete_local_folder(parent, path):
+    parent = Path(parent).expanduser().resolve(strict=True)
+    original = Path(path)
+    target = parent / original.name
+    if original.parent.resolve(strict=True) != parent:
+        raise ValueError("Папка находится вне каталога сравнения.")
+    try:
+        info = target.lstat()
+    except FileNotFoundError:
+        return
+    if (
+        not stat.S_ISDIR(info.st_mode)
+        or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        or target.resolve(strict=True).parent != parent
+    ):
+        raise ValueError("Выбранный путь не является обычной локальной папкой.")
+
+    def retry_readonly(operation, filename, error):
+        if not isinstance(error[1], PermissionError):
+            raise error[1]
+        info = os.lstat(filename)
+        if (stat.S_ISLNK(info.st_mode)
+                or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT):
+            raise error[1]
+        os.chmod(filename, info.st_mode | stat.S_IWRITE)
+        operation(filename)
+
+    shutil.rmtree(target, onerror=retry_readonly)
 
 
 def compare(folder, login):

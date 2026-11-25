@@ -17,7 +17,7 @@ class BranchError(Exception):
     pass
 
 
-def git(path, *args, allowed=(0,), input_text=None):
+def git(path, *args, allowed=(0,), input_text=None, timeout=20):
     command = ["git"]
     if path:
         command.extend(("-C", path))
@@ -25,7 +25,7 @@ def git(path, *args, allowed=(0,), input_text=None):
     try:
         result = subprocess.run(
             command, input=input_text.encode("ascii") if input_text is not None else None,
-            capture_output=True, timeout=20,
+            capture_output=True, timeout=timeout,
             env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"},
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
