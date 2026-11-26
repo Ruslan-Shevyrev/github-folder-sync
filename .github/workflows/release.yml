@@ -28,5 +28,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = $env:GITHUB_REF_NAME
-          $archive = "dist/GitHubFolderComparison-$tag-windows-x64.zip"
+          $archive = "dist/GitHubFolderSync-$tag-windows-x64.zip"
           gh release create $tag $archive --verify-tag --generate-notes

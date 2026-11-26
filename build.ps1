@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Push-Location $PSScriptRoot
-$settingsFile = 'dist\GitHubFolderComparison\settings\settings.json'
+$settingsFile = 'dist\GitHubFolderSync\settings\settings.json'
 $settingsBackup = $null
 try {
     $venvPython = '.\.venv\Scripts\python.exe'
@@ -25,13 +25,13 @@ try {
         $settingsBackup = [IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $settingsFile))
     }
 
-    & $venvPython -m PyInstaller --onedir --windowed --noconfirm --name GitHubFolderComparison --specpath build --collect-data customtkinter github_folder_sync.py
+    & $venvPython -m PyInstaller --onedir --windowed --noconfirm --name GitHubFolderSync --specpath build --collect-data customtkinter github_folder_sync.py
     if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed.' }
 
-    Write-Host 'Application: dist\GitHubFolderComparison\GitHubFolderComparison.exe'
+    Write-Host 'Application: dist\GitHubFolderSync\GitHubFolderSync.exe'
     if ($Zip) {
-        $archive = "dist\GitHubFolderComparison-$Version-windows-x64.zip"
-        & $venvPython -m zipfile -c $archive 'dist\GitHubFolderComparison'
+        $archive = "dist\GitHubFolderSync-$Version-windows-x64.zip"
+        & $venvPython -m zipfile -c $archive 'dist\GitHubFolderSync'
         if ($LASTEXITCODE -ne 0) { throw 'Could not create the release archive.' }
         Write-Host "Archive: $archive"
     }

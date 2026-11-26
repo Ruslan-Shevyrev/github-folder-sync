@@ -41,4 +41,4 @@ python github_folder_sync.py
 powershell -ExecutionPolicy Bypass -File .\build.ps1 -Zip
 ```
 
-Скрипт создаёт окружение и устанавливает PyInstaller. Готовый файл находится в `dist\GitHubFolderComparison\GitHubFolderComparison.exe`. Для переноса приложения скопируйте всю папку `GitHubFolderComparison` или используйте готовый ZIP из `dist`. Параметр `-Zip` можно опустить.
+Скрипт создаёт окружение и устанавливает PyInstaller. Готовый файл находится в `dist\GitHubFolderSync\GitHubFolderSync.exe`. Для переноса приложения скопируйте всю папку `GitHubFolderSync` или используйте готовый ZIP из `dist`. Параметр `-Zip` можно опустить.
