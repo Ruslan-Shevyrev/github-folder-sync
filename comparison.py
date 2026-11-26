@@ -20,6 +20,7 @@ class Match:
     branches: tuple[Branch, ...] = ()
     branch_error: str = ""
     mismatched_origin: str = ""
+    visibility: str = ""
 
     @property
     def status(self):
@@ -33,11 +34,15 @@ def validate_login(login):
         raise ValueError("Введите логин GitHub, например octocat.")
 
 
-def github_json(url, *, allow_missing=False):
+def github_json(url, *, allow_missing=False, token=""):
     request = Request(url, headers={
         "Accept": "application/vnd.github+json",
         "User-Agent": "GitHubFolderComparison",
     })
+    if token:
+        if not url.startswith("https://api.github.com/"):
+            raise ValueError("Invalid GitHub API URL.")
+        request.add_unredirected_header("Authorization", f"Bearer {token}")
     try:
         with urlopen(request, timeout=15) as response:
             return json.load(response), response.headers.get("Link", "")
@@ -53,37 +58,48 @@ def github_json(url, *, allow_missing=False):
         raise ValueError("Не удалось загрузить репозитории. Проверьте подключение к GitHub.") from error
 
 
-def public_repositories(login):
+def github_repositories(login, token=""):
     validate_login(login)
     url = f"https://api.github.com/users/{login}/repos?type=owner&sort=full_name&per_page=100"
+    if token:
+        account, _ = github_json("https://api.github.com/user", token=token)
+        if account["login"].casefold() != login.casefold():
+            raise ValueError("Токен GitHub принадлежит другому пользователю.")
+        url = "https://api.github.com/user/repos?affiliation=owner&sort=full_name&per_page=100"
     repositories = {}
     while url:
-        page, link = github_json(url, allow_missing=not repositories)
+        page, link = github_json(url, allow_missing=not repositories, token=token)
         if page is None:
             raise ValueError(f"Аккаунт GitHub «{login}» не найден.")
-        repositories.update((repo["name"], repo["html_url"]) for repo in page)
+        repositories.update(
+            (repo["name"], Match(repo["name"], github_url=repo["html_url"], visibility=repo["visibility"]))
+            for repo in page
+            if not token or repo["owner"]["login"].casefold() == login.casefold()
+        )
         next_page = re.search(r'<(https://api\.github\.com/[^>]+)>;\s*rel="next"', link)
         url = next_page.group(1) if next_page else None
     return repositories
 
 
-def refresh_repository(folder, login, name):
+def refresh_repository(folder, login, name, token=""):
     validate_login(login)
     root = Path(folder).expanduser().absolute()
     if not root.is_dir():
         raise ValueError(f"Локальная папка «{root}» недоступна.")
     candidate = root / name
     local_path = str(candidate) if candidate.is_dir() else ""
-    repo, _ = github_json(f"https://api.github.com/repos/{login}/{quote(name, safe='')}", allow_missing=True)
+    repo, _ = github_json(f"https://api.github.com/repos/{login}/{quote(name, safe='')}", allow_missing=True, token=token)
     github_url = ""
+    visibility = ""
     if (
-        repo and repo["visibility"] == "public"
+        repo and (token or repo["visibility"] == "public")
         and repo["owner"]["login"].casefold() == login.casefold()
         and repo["name"].casefold() == name.casefold()
     ):
         github_url = repo["html_url"]
+        visibility = repo["visibility"]
     if local_path or github_url:
-        return with_branches(Match(name, local_path, github_url))
+        return with_branches(Match(name, local_path, github_url, visibility=visibility), token)
 
 
 def delete_local_folder(parent, path):
@@ -116,7 +132,7 @@ def delete_local_folder(parent, path):
     shutil.rmtree(target, onerror=retry_readonly)
 
 
-def compare(folder, login):
+def compare(folder, login, token=""):
     if not folder:
         raise ValueError("Укажите локальную папку.")
     root = Path(folder).expanduser().absolute()
@@ -126,21 +142,20 @@ def compare(folder, login):
     except OSError as error:
         raise ValueError(f"Не удалось прочитать папку «{root}».") from error
 
-    repositories = public_repositories(login)
-    by_name = {name.casefold(): url for name, url in repositories.items()}
+    repositories = github_repositories(login, token)
+    by_name = {name.casefold(): row for name, row in repositories.items()}
     local_names = {name.casefold() for name in folders}
-    rows = [Match(name, str(root / name), by_name.get(name.casefold(), "")) for name in folders]
-    rows.extend(
-        Match(name, github_url=url)
-        for name, url in repositories.items()
-        if name.casefold() not in local_names
-    )
+    rows = [
+        replace(by_name.get(name.casefold(), Match(name)), name=name, local_path=str(root / name))
+        for name in folders
+    ]
+    rows.extend(row for name, row in by_name.items() if name not in local_names)
     return sorted(rows, key=lambda row: (row.name.casefold(), row.name))
 
 
-def with_branches(row):
+def with_branches(row, token=""):
     try:
-        return replace(row, branches=compare_branches(row.local_path, row.github_url),
+        return replace(row, branches=compare_branches(row.local_path, row.github_url, token),
                        branch_error="", mismatched_origin="")
     except OriginMismatch as error:
         return replace(row, branches=(), branch_error=str(error), mismatched_origin=error.origin)

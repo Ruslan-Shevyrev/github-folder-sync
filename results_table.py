@@ -10,6 +10,7 @@ COLUMNS = (
     ("delete", "", 42),
     ("name", "Название", 190),
     ("status", "Статус", 160),
+    ("visibility", "Видимость", 108),
     ("branches", "Ветки", 560),
     ("path", "Локальный путь", 265),
     ("github", "Ссылка на GitHub", 290),
@@ -195,6 +196,7 @@ class ResultsTable(ctk.CTkFrame):
         x = 0
         bottom = top + 34
         values = {"number": str(number), "name": row.name, "status": label,
+                  "visibility": row.visibility.capitalize() or "—",
                   "path": row.local_path, "github": row.github_url}
         sync_x = 0
         for column, _, width in self.columns:

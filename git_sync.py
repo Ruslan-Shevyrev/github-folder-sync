@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from branches import BranchError, branch_refs, git, github_repository
+from branches import BranchError, branch_refs, git, github_git, github_repository
 
 
 def corrected_origin(url, current):
@@ -24,7 +24,7 @@ def change_origin(path, current, target):
     git(str(path), "remote", "set-url", "origin", target)
 
 
-def sync_from_github(path, url, branch):
+def sync_from_github(path, url, branch, token=""):
     if not github_repository(url):
         raise BranchError("Не удалось определить репозиторий GitHub.")
 
@@ -42,12 +42,12 @@ def sync_from_github(path, url, branch):
         raise BranchError("Локальная ветка изменилась. Повторите сравнение.")
 
     if branch.status == "github":
-        remote = branch_refs(git(local, "ls-remote", "--heads", url, ref).stdout)
+        remote = branch_refs(github_git(local, "ls-remote", "--heads", url, ref, token=token).stdout)
         commit = remote.get(branch.name)
         if not commit:
             raise BranchError("Ветка на GitHub больше недоступна. Повторите сравнение.")
-        git(local, "fetch", "--no-tags", "--no-prune", "--no-recurse-submodules",
-            "--no-write-fetch-head", "--refmap=", url, commit, timeout=300)
+        github_git(local, "fetch", "--no-tags", "--no-prune", "--no-recurse-submodules",
+            "--no-write-fetch-head", "--refmap=", url, commit, timeout=300, token=token)
         git(local, "branch", "--", branch.name, commit)
         return
 
@@ -58,11 +58,11 @@ def sync_from_github(path, url, branch):
         raise BranchError(f"Переключитесь на ветку «{branch.name}» в локальном репозитории и повторите обновление.")
     if git(local, "status", "--porcelain", "--untracked-files=all").stdout.strip():
         raise BranchError("В рабочей папке есть изменения. Сохраните их перед обновлением.")
-    git(local, "-c", "pull.squash=false", "pull", "--ff-only", "--no-rebase", "--no-autostash",
-        "--no-recurse-submodules", url, ref, timeout=300)
+    github_git(local, "-c", "pull.squash=false", "pull", "--ff-only", "--no-rebase", "--no-autostash",
+        "--no-recurse-submodules", url, ref, timeout=300, token=token)
 
 
-def clone_from_github(destination, url, branch):
+def clone_from_github(destination, url, branch, token=""):
     if not github_repository(url):
         raise BranchError("Не удалось определить репозиторий GitHub.")
     try:
@@ -72,7 +72,7 @@ def clone_from_github(destination, url, branch):
 
     options = ("--branch", branch.name) if branch else ()
     try:
-        git(str(destination.parent), "clone", *options, "--", url, str(destination), timeout=600)
+        github_git(str(destination.parent), "clone", *options, "--", url, str(destination), timeout=600, token=token)
     except BranchError:
         try:
             destination.rmdir()

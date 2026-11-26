@@ -1,4 +1,6 @@
 import json
+import os
+import re
 import sys
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -9,16 +11,65 @@ def settings_path():
     return Path(launch_file).resolve().parent / "settings" / "settings.json"
 
 
+def validate_token_reference(value):
+    if value and not re.fullmatch(r"(?:v\{[^{}=\r\n]+\}|[A-Za-z0-9_-]+)", value):
+        raise ValueError("Введите токен GitHub или ссылку вида v{ИМЯ_ПЕРЕМЕННОЙ}.")
+
+
+def resolve_token(value):
+    validate_token_reference(value)
+    if not value.startswith("v{"):
+        return value
+    name = value[2:-1]
+    token = os.environ.get(name)
+    if token is None and sys.platform == "win32":
+        import winreg
+
+        for hive, key in (
+            (winreg.HKEY_CURRENT_USER, r"Environment"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
+        ):
+            try:
+                with winreg.OpenKey(hive, key) as environment:
+                    token, kind = winreg.QueryValueEx(environment, name)
+            except OSError:
+                continue
+            if kind in (winreg.REG_SZ, winreg.REG_EXPAND_SZ):
+                break
+
+    if not isinstance(token, str) or not token.strip():
+        raise ValueError(f"Переменная окружения «{name}» не задана или пуста.")
+    token = token.strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", token):
+        raise ValueError(f"Переменная окружения «{name}» содержит недопустимое значение токена.")
+    return token
+
+
 def load_settings(path):
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return {"users": [], "profiles": {}, "default_profile": None}
+        return {"users": {}, "profiles": {}, "default_profile": None}
+
+    if not isinstance(data, dict):
+        raise ValueError("Некорректный формат файла настроек.")
+    users = data.get("users")
+    if isinstance(users, list) and all(isinstance(user, str) and user for user in users):
+        tokens = data.pop("tokens", {})
+        if not isinstance(tokens, dict) or not all(
+            user in users and isinstance(value, str) for user, value in tokens.items()
+        ):
+            raise ValueError("Некорректный формат токенов.")
+        data["users"] = {
+            user: {"token": tokens[user]} if tokens.get(user) else {} for user in users
+        }
 
     if (
-        not isinstance(data, dict)
-        or not isinstance(data.get("users"), list)
-        or not all(isinstance(user, str) and user for user in data["users"])
+        not isinstance(data.get("users"), dict)
+        or not all(
+            user and isinstance(account, dict) and isinstance(account.get("token", ""), str)
+            for user, account in data["users"].items()
+        )
         or not isinstance(data.get("profiles"), dict)
         or not all(
             isinstance(profile, dict)

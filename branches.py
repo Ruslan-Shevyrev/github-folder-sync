@@ -1,6 +1,7 @@
 import os
 import re
 import subprocess
+from base64 import b64encode
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,7 +24,7 @@ class OriginMismatch(BranchError):
         self.origin = origin
 
 
-def git(path, *args, allowed=(0,), input_text=None, timeout=20):
+def git(path, *args, allowed=(0,), input_text=None, timeout=20, extra_env=None):
     command = ["git"]
     if path:
         command.extend(("-C", path))
@@ -32,7 +33,7 @@ def git(path, *args, allowed=(0,), input_text=None, timeout=20):
         result = subprocess.run(
             command, input=input_text.encode("ascii") if input_text is not None else None,
             capture_output=True, timeout=timeout,
-            env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"},
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never", **(extra_env or {})},
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except FileNotFoundError as error:
@@ -45,6 +46,28 @@ def git(path, *args, allowed=(0,), input_text=None, timeout=20):
         raise BranchError("Git не смог прочитать ветки или их историю.")
     result.stdout = result.stdout.decode("utf-8", errors="replace")
     return result
+
+
+def github_git(path, *args, token="", **options):
+    if not token:
+        return git(path, *args, **options)
+    if not any(re.fullmatch(r"https://github\.com/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+", arg)
+               for arg in args):
+        raise BranchError("Токен можно передать только GitHub по HTTPS.")
+
+    # Git reads HTTP credentials from the child environment instead of the command line.
+    basic = b64encode(f"x-access-token:{token}".encode("ascii")).decode("ascii")
+    count = int(os.environ.get("GIT_CONFIG_COUNT") or "0")
+    config = {}
+    for index, (key, value) in enumerate((
+        ("http.https://github.com/.extraHeader", ""),
+        ("http.https://github.com/.extraHeader", f"Authorization: Basic {basic}"),
+        ("http.https://github.com/.followRedirects", "false"),
+    ), count):
+        config[f"GIT_CONFIG_KEY_{index}"] = key
+        config[f"GIT_CONFIG_VALUE_{index}"] = value
+    config["GIT_CONFIG_COUNT"] = str(count + 3)
+    return git(path, *args, extra_env=config, **options)
 
 
 def branch_refs(output):
@@ -71,7 +94,7 @@ def relationship(path, local, remote, shallow):
     return "unknown" if shallow else "diverged"
 
 
-def compare_branches(path, url):
+def compare_branches(path, url, token=""):
     local = {}
     if path:
         if not (Path(path) / ".git").exists():
@@ -88,7 +111,7 @@ def compare_branches(path, url):
 
     remote = {}
     if url:
-        remote = branch_refs(git(None, "ls-remote", "--heads", url).stdout)
+        remote = branch_refs(github_git(None, "ls-remote", "--heads", url, token=token).stdout)
 
     changed = {remote[name] for name in local.keys() & remote.keys() if local[name] != remote[name]}
     missing = {
@@ -96,9 +119,9 @@ def compare_branches(path, url):
         if git(path, "cat-file", "-e", f"{commit}^{{commit}}", allowed=(0, 1, 128)).returncode
     }
     if missing:
-        git(path, "fetch", "--no-tags", "--no-prune", "--no-recurse-submodules", "--no-auto-maintenance",
+        github_git(path, "fetch", "--no-tags", "--no-prune", "--no-recurse-submodules", "--no-auto-maintenance",
             "--no-write-fetch-head", "--refmap=", url, "--stdin",
-            input_text="\n".join(sorted(missing)) + "\n")
+            input_text="\n".join(sorted(missing)) + "\n", token=token)
 
     shallow = bool(changed) and git(path, "rev-parse", "--is-shallow-repository").stdout.strip() == "true"
     branches = []

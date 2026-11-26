@@ -15,7 +15,7 @@ from branches import BranchError
 from dialog_position import center_windows_dialog
 from comparison import compare, delete_local_folder, refresh_repository, validate_login, with_branches
 from git_sync import change_origin, clone_from_github, corrected_origin, sync_from_github
-from settings import load_settings, save_settings, settings_path
+from settings import load_settings, resolve_token, save_settings, settings_path, validate_token_reference
 from results_table import ResultsTable
 
 
@@ -164,7 +164,7 @@ def confirm_action(parent, title, details, button_text, on_confirm, *, destructi
     return dialog
 
 
-def modal_message(title, details, *, parent, question=False, warning=False):
+def modal_message(title, details, *, parent, question=False, warning=False, heading=True):
     answer = False
     if question:
         def accept():
@@ -174,7 +174,7 @@ def modal_message(title, details, *, parent, question=False, warning=False):
         dialog = confirm_action(parent, title, details, "Подтвердить", accept, destructive=warning)
     else:
         dialog, frame = create_dialog(parent, title)
-        label_widget(frame, text=title, heading=True).pack(anchor="w", pady=(0, 10))
+        label_widget(frame, text=title, heading=heading).pack(anchor="w", pady=(0, 10))
         label_widget(frame, text=details, muted=True, justify="left", wraplength=460).pack(anchor="w")
         ok = button_widget(frame, text="OK", primary=True)
         ok.pack(anchor="e", pady=(16, 0))
@@ -217,13 +217,66 @@ def dialog_actions(dialog, frame, row, focus, save):
     dialog.bind("<Return>", lambda _: submit())
 
 
-def user_dialog(parent, on_save, *, login=""):
+TOKEN_HELP_TITLE = "Fine-grained personal access tokens"
+TOKEN_HELP_TEXT = "Read access to code and metadata"
+
+
+def token_help(parent, container):
+    tooltip = None
+
+    def hide(_event=None):
+        nonlocal tooltip
+        if tooltip is not None:
+            tooltip.destroy()
+            tooltip = None
+
+    def show(event):
+        nonlocal tooltip
+        if tooltip is not None:
+            return
+        tooltip = tk.Toplevel(parent, background=BORDER)
+        tooltip.withdraw()
+        tooltip.overrideredirect(True)
+        frame = ctk.CTkFrame(tooltip, fg_color=FIELD, corner_radius=0)
+        frame.pack(padx=1, pady=1)
+        label_widget(frame, text=TOKEN_HELP_TITLE).pack(
+            anchor="w", padx=10, pady=(4, 0)
+        )
+        label_widget(frame, text=TOKEN_HELP_TEXT).pack(anchor="w", padx=10, pady=(0, 4))
+        tooltip.update_idletasks()
+        tooltip.geometry(f"+{event.x_root + 12}+{event.y_root + 18}")
+        tooltip.deiconify()
+
+    def open_help():
+        hide()
+        modal_message(TOKEN_HELP_TITLE, TOKEN_HELP_TEXT, parent=parent, heading=False)
+
+    button = ctk.CTkButton(container, text="?", width=22, height=22, corner_radius=11,
+                           border_width=1, border_color=BORDER, fg_color=FIELD,
+                           hover_color="#353d55", text_color=TEXT, font=("Segoe UI", 13, "bold"),
+                           command=open_help)
+    button.bind("<Enter>", show, add="+")
+    button.bind("<Leave>", hide, add="+")
+    button.pack(side="left", padx=(7, 0))
+
+
+def user_dialog(parent, on_save, *, login="", token=""):
     title = "Редактирование пользователя" if login else "Добавить пользователя"
     dialog, frame = create_dialog(parent, title)
     label_widget(frame, text="Логин GitHub").grid(row=0, column=0, sticky="w")
     entry = dialog_entry(frame, login)
     entry.grid(row=1, column=0, sticky="ew", pady=(6, 10))
-    dialog_actions(dialog, frame, 2, entry, lambda: on_save(entry.get().strip()))
+    token_heading = ctk.CTkFrame(frame, fg_color="transparent")
+    token_heading.grid(row=2, column=0, sticky="w")
+    label_widget(token_heading, text="Токен GitHub (необязательно)").pack(side="left")
+    token_help(dialog, token_heading)
+    token_input = dialog_entry(frame, token)
+    token_input.configure(show="*")
+    token_input.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+    label_widget(frame, text="Токен или v{ИМЯ_ПЕРЕМЕННОЙ}", muted=True).grid(
+        row=4, column=0, sticky="w", pady=(0, 8)
+    )
+    dialog_actions(dialog, frame, 5, entry, lambda: on_save(entry.get().strip(), token_input.get().strip()))
 
 
 def profile_dialog(parent, profile, on_save, *, users=(), name="", is_default=False, editing=False):
@@ -279,7 +332,7 @@ def run():
     try:
         preferences = load_settings(preferences_path)
     except (OSError, ValueError) as error:
-        preferences = {"users": [], "profiles": {}, "default_profile": None}
+        preferences = {"users": {}, "profiles": {}, "default_profile": None}
         status.set(f"Не удалось прочитать настройки: {error}")
     results = Queue()
     counts = Counter()
@@ -290,7 +343,7 @@ def run():
     panel.grid_propagate(False)
     panel.columnconfigure(1, weight=1)
     panel.rowconfigure(6, weight=1)
-    label_widget(panel, text="Публичные репозитории GitHub", heading=True).grid(
+    label_widget(panel, text="Репозитории GitHub", heading=True).grid(
         row=0, column=0, columnspan=3, sticky="w", padx=(16, 0), pady=(14, 12)
     )
     label_widget(panel, text="Пользователь GitHub").grid(row=1, column=0, sticky="w", padx=(16, 4))
@@ -316,13 +369,17 @@ def run():
             folder.set(profile["folder"])
             login.set(profile["login"])
 
-    def add_user(name):
+    def add_user(name, token):
         nonlocal preferences
         validate_login(name)
+        validate_token_reference(token)
         data = load_settings(preferences_path)
         existing = next((user for user in data["users"] if user.casefold() == name.casefold()), None)
         if existing is None:
-            data["users"].append(name)
+            data["users"][name] = {}
+        if token:
+            data["users"][existing or name]["token"] = token
+        if existing is None or token:
             save_settings(preferences_path, data)
         preferences = data
         refresh_choices()
@@ -373,9 +430,10 @@ def run():
                 return
             original = selection[0]
 
-            def save(name):
+            def save(name, token):
                 nonlocal preferences
                 validate_login(name)
+                validate_token_reference(token)
                 data = load_settings(preferences_path)
                 users = data["users"]
                 if original not in users:
@@ -383,11 +441,15 @@ def run():
                 if any(user != original and user.casefold() == name.casefold() for user in users):
                     raise ValueError("Пользователь с таким логином уже сохранён.")
                 if name != original:
-                    users[users.index(original)] = name
+                    users[name] = users.pop(original)
                     for profile in data["profiles"].values():
                         if profile["login"] == original:
                             profile["login"] = name
-                    save_settings(preferences_path, data)
+                if token:
+                    users[name]["token"] = token
+                else:
+                    users[name].pop("token", None)
+                save_settings(preferences_path, data)
                 preferences = data
                 if login.get() == original:
                     login.set(name)
@@ -396,7 +458,7 @@ def run():
                 status.set(f"Логин «{name}» сохранён.")
                 return True
 
-            user_dialog(dialog, save, login=original)
+            user_dialog(dialog, save, login=original, token=preferences["users"][original].get("token", ""))
 
         def delete():
             nonlocal preferences
@@ -412,7 +474,7 @@ def run():
                 return
             try:
                 data = load_settings(preferences_path)
-                data["users"] = [user for user in data["users"] if user != name]
+                data["users"].pop(name, None)
                 data["profiles"] = {
                     key: profile for key, profile in data["profiles"].items()
                     if profile["login"] != name
@@ -623,10 +685,18 @@ def run():
     browse = button_widget(panel, text="Обзор…", command=choose_folder)
     browse.grid(row=2, column=2, sticky="ew", padx=(0, 16))
 
+    def current_token():
+        return resolve_token(preferences["users"].get(login.get(), {}).get("token", ""))
+
     def can_update_row():
         if button.cget("state") == "disabled":
             return False
-        if compared != (folder.get().strip(), login.get()):
+        try:
+            token = current_token()
+        except ValueError as error:
+            modal_message("GitHub", str(error), parent=root)
+            return False
+        if compared != (folder.get().strip(), login.get(), token):
             modal_message("Сравнение устарело", "Сначала повторите сравнение для выбранных настроек.",
                                 parent=root)
             return False
@@ -645,7 +715,7 @@ def run():
         loader.start()
 
     def run_row_action(row, action, operation=None):
-        base_path, account = compared
+        base_path, account, token = compared
         set_busy(True)
         status.set(row.name)
         show_loader(action)
@@ -658,7 +728,7 @@ def run():
                 except (BranchError, OSError, ValueError) as error:
                     errors.append(str(error))
             try:
-                updated = refresh_repository(base_path, account, row.name)
+                updated = refresh_repository(base_path, account, row.name, token)
             except (OSError, ValueError, TypeError, KeyError) as error:
                 errors.append(str(error))
                 updated = row
@@ -711,7 +781,7 @@ def run():
         set_busy(True)
         confirm_action(
             root, action, f"{row.name}{branch_line}\n\n{destination}", button_text,
-            lambda: run_row_action(row, progress_text, lambda: operation(destination, row.github_url, branch)),
+            lambda: run_row_action(row, progress_text, lambda: operation(destination, row.github_url, branch, compared[2])),
             on_cancel=lambda: set_busy(False),
         )
 
@@ -767,11 +837,11 @@ def run():
     label_widget(panel, text="Щелчок по ссылке откроет GitHub, а по локальному пути — папку.",
               muted=True).grid(row=5, column=0, columnspan=3, sticky="w", padx=16, pady=(5, 5))
 
-    def load(path, account):
+    def load(path, account, token):
         try:
-            rows = compare(path, account)
+            rows = compare(path, account, token)
             for row in rows:
-                results.put(("row", with_branches(row)))
+                results.put(("row", with_branches(row, token)))
             results.put(("done", None))
         except (ValueError, OSError, TypeError, KeyError) as error:
             results.put(("error", str(error)))
@@ -816,13 +886,18 @@ def run():
         if not path or not account:
             status.set("Укажите папку и выберите сохранённого пользователя GitHub.")
             return
+        try:
+            token = current_token()
+        except ValueError as error:
+            status.set(str(error))
+            return
         set_busy(True)
-        compared = (path, account)
+        compared = (path, account, token)
         table.clear()
         counts.clear()
-        status.set("Сравниваем папки с публичными репозиториями…")
+        status.set("Сравниваем папки с репозиториями GitHub…")
         show_loader("Сравнение")
-        Thread(target=load, args=(path, account), daemon=True).start()
+        Thread(target=load, args=(path, account, token), daemon=True).start()
         root.after(75, show_results)
 
     button = button_widget(panel, text="Сравнить", primary=True, command=submit)
