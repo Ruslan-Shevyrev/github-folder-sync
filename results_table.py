@@ -60,6 +60,7 @@ class ResultsTable(ctk.CTkFrame):
         self.columns = COLUMNS
         self.row_data = {}
         self.item_bindings = {}
+        self.action_fills = {}
         self.resize_job = None
         self.clear()
         self.canvas.bind("<Configure>", self.schedule_resize)
@@ -122,6 +123,7 @@ class ResultsTable(ctk.CTkFrame):
 
     def delete_items(self, tag):
         for item in self.canvas.find_withtag(tag):
+            self.action_fills.pop(item, None)
             for target, sequence, token in self.item_bindings.pop(item, ()):
                 self.canvas.tag_unbind(target, sequence, token)
         self.canvas.delete(tag)
@@ -252,9 +254,21 @@ class ResultsTable(ctk.CTkFrame):
         self.bind_item(item, item, "<Leave>", self.hide_tooltip)
         return item
 
+    def register_action(self, tag):
+        self.canvas.addtag_withtag("row-action", tag)
+        for item in self.canvas.find_withtag(tag):
+            normal = self.canvas.itemcget(item, "fill")
+            disabled = self.canvas.itemcget(item, "disabledfill")
+            self.action_fills[item] = (normal, disabled)
+            if not self.actions_enabled:
+                self.canvas.itemconfigure(item, state="disabled", fill=disabled)
+
     def set_actions_enabled(self, enabled):
         self.actions_enabled = enabled
-        self.canvas.itemconfigure("row-action", state="normal" if enabled else "disabled")
+        state = "normal" if enabled else "disabled"
+        # Tk can keep a pressed item as current and skip its disabled fill.
+        for item, (normal, disabled) in self.action_fills.items():
+            self.canvas.itemconfigure(item, state=state, fill=normal if enabled else disabled)
         if not enabled:
             self.hide_tooltip()
             self.canvas.configure(cursor="")
@@ -283,17 +297,17 @@ class ResultsTable(ctk.CTkFrame):
                                     font=("Segoe UI", 10, "bold"), tags=tag)
         else:
             icon(center_x, center_y, tag)
-        self.canvas.addtag_withtag("row-action", tag)
-        if not self.actions_enabled:
-            self.canvas.itemconfigure(tag, state="disabled")
+        self.register_action(tag)
 
         def hover(color, cursor):
-            self.canvas.itemconfigure(button, fill=color)
-            self.canvas.configure(cursor=cursor)
+            if self.actions_enabled:
+                self.canvas.itemconfigure(button, fill=color)
+                self.canvas.configure(cursor=cursor)
 
         def enter(event):
-            hover(active, "hand2")
-            self.show_tooltip(event, hint)
+            if self.actions_enabled:
+                hover(active, "hand2")
+                self.show_tooltip(event, hint)
 
         def leave(_event):
             hover(background, "")
@@ -331,9 +345,8 @@ class ResultsTable(ctk.CTkFrame):
             color = "#d4baff" if can_fix else BRANCH_COLORS["gray"]
             item = self.text(x, y, row.branch_error or "—", color, width)
             if can_fix:
-                self.canvas.itemconfigure(item, disabledfill="#9297ac",
-                                          state="normal" if self.actions_enabled else "disabled")
-                self.canvas.addtag_withtag("row-action", item)
+                self.canvas.itemconfigure(item, disabledfill="#9297ac")
+                self.register_action(item)
                 self.bind_link(item, lambda: self.on_fix_origin(row) if self.actions_enabled else None)
             return self.canvas.bbox(item)[3]
         for branch in row.branches:

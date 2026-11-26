@@ -12,11 +12,13 @@ import webbrowser
 import customtkinter as ctk
 
 from branches import BranchError
+from comparison_cache import load_cache, profile_cache_path, save_cache
 from dialog_position import center_windows_dialog
 from comparison import compare, delete_local_folder, refresh_repository, validate_login, with_branches
 from git_sync import change_origin, clone_from_github, corrected_origin, sync_from_github
 from settings import load_settings, resolve_token, save_settings, settings_path, validate_token_reference
 from results_table import ResultsTable
+from wide_combobox import WideComboBox
 
 
 STATUSES = {
@@ -51,7 +53,7 @@ def entry_widget(parent, **options):
 
 
 def combo_widget(parent, **options):
-    return ctk.CTkComboBox(
+    return WideComboBox(
         parent, font=FONT, dropdown_font=FONT, text_color=TEXT, fg_color=FIELD, border_color=BORDER,
         button_color=FIELD, button_hover_color="#353d55", dropdown_fg_color=FIELD,
         dropdown_hover_color="#353d55", dropdown_text_color=TEXT,
@@ -337,6 +339,7 @@ def run():
     results = Queue()
     counts = Counter()
     compared = None
+    active_cache = None
 
     panel = ctk.CTkFrame(root, fg_color=PANEL, corner_radius=12, border_width=1, border_color="#30374d")
     panel.pack(fill="both", expand=True, padx=12, pady=12)
@@ -368,6 +371,7 @@ def run():
         if profile:
             folder.set(profile["folder"])
             login.set(profile["login"])
+            show_profile_cache()
 
     def add_user(name, token):
         nonlocal preferences
@@ -673,9 +677,6 @@ def run():
     profiles_button.pack(side="left")
     profile_input.configure(command=apply_profile)
     refresh_choices()
-    if preferences["default_profile"]:
-        profile_name.set(preferences["default_profile"])
-        apply_profile()
 
     def choose_folder():
         selected = filedialog.askdirectory(parent=root, title="Выберите папку", mustexist=True)
@@ -689,6 +690,7 @@ def run():
         return resolve_token(preferences["users"].get(login.get(), {}).get("token", ""))
 
     def can_update_row():
+        nonlocal compared
         if button.cget("state") == "disabled":
             return False
         try:
@@ -696,10 +698,12 @@ def run():
         except ValueError as error:
             modal_message("GitHub", str(error), parent=root)
             return False
-        if compared != (folder.get().strip(), login.get(), token):
+        selection = (folder.get().strip(), login.get())
+        if compared is None or compared[:2] != selection or compared[2] not in (None, token):
             modal_message("Сравнение устарело", "Сначала повторите сравнение для выбранных настроек.",
                                 parent=root)
             return False
+        compared = (*selection, token)
         return True
 
     def set_busy(busy):
@@ -834,8 +838,59 @@ def run():
     loader_label.pack(side="left", padx=(10, 0))
     loader_group.grid_remove()
 
-    label_widget(panel, text="Щелчок по ссылке откроет GitHub, а по локальному пути — папку.",
-              muted=True).grid(row=5, column=0, columnspan=3, sticky="w", padx=16, pady=(5, 5))
+    table_notes = ctk.CTkFrame(panel, fg_color="transparent")
+    table_notes.grid(row=5, column=0, columnspan=3, sticky="ew", padx=16, pady=(5, 5))
+    table_notes.columnconfigure(0, weight=1)
+    label_widget(table_notes, text="Щелчок по ссылке откроет GitHub, а по локальному пути — папку.",
+                 muted=True).grid(row=0, column=0, sticky="w")
+    cache_notice = label_widget(table_notes, text="Данные из кэша", muted=True)
+    cache_notice.configure(text_color="#ff999f")
+    cache_notice.grid(row=0, column=1, sticky="e", padx=(12, 0))
+    cache_notice.grid_remove()
+
+    def selected_cache_path():
+        name = profile_name.get()
+        profile = preferences["profiles"].get(name)
+        if not profile or login.get() != profile["login"]:
+            return None
+        path = folder.get().strip()
+        if not path or Path(path).expanduser().absolute() != Path(profile["folder"]).expanduser().absolute():
+            return None
+        authenticated = bool(preferences["users"].get(login.get(), {}).get("token"))
+        return profile_cache_path(preferences_path, name, path, login.get(), authenticated)
+
+    def summary_text():
+        return "  ·  ".join(f"{label} — {counts[key]}" for key, (label, _, _) in STATUSES.items())
+
+    def show_profile_cache():
+        nonlocal compared, active_cache
+        compared = None
+        active_cache = None
+        table.clear()
+        counts.clear()
+        cache_notice.grid_remove()
+        path = selected_cache_path()
+        rows = load_cache(path) if path is not None else None
+        table.set_actions_enabled(True)
+        if rows is None:
+            status.set("Нажмите «Сравнить», чтобы получить данные.")
+            return
+        compared = (folder.get().strip(), login.get(), None)
+        active_cache = path
+        for row in rows:
+            table.add(row, STATUSES[row.status])
+            counts[row.status] += 1
+        cache_notice.grid()
+        status.set(summary_text())
+
+    def remember_table():
+        if active_cache is None:
+            return ""
+        try:
+            save_cache(active_cache, (row for row, _ in table.row_data.values()))
+        except OSError:
+            return "  ·  Не удалось сохранить кэш."
+        return ""
 
     def load(path, account, token):
         try:
@@ -873,13 +928,17 @@ def run():
                     status.set(error)
                     modal_message("Не удалось завершить действие", error, parent=root)
                     return
-            summary = "  ·  ".join(f"{label} — {counts[key]}" for key, (label, _, _) in STATUSES.items())
-            status.set(value if kind == "error" else summary)
+            if kind == "error":
+                if active_cache is not None and active_cache.is_file():
+                    show_profile_cache()
+                status.set(value)
+            else:
+                status.set(summary_text() + remember_table())
             return
         root.after(75, show_results)
 
     def submit():
-        nonlocal compared
+        nonlocal compared, active_cache
         if button.cget("state") == "disabled":
             return
         path, account = folder.get().strip(), login.get()
@@ -893,6 +952,8 @@ def run():
             return
         set_busy(True)
         compared = (path, account, token)
+        active_cache = selected_cache_path()
+        cache_notice.grid_remove()
         table.clear()
         counts.clear()
         status.set("Сравниваем папки с репозиториями GitHub…")
@@ -903,6 +964,9 @@ def run():
     button = button_widget(panel, text="Сравнить", primary=True, command=submit)
     button.grid(row=4, column=2, sticky="ew", padx=(0, 16), pady=(8, 0))
     controls = (folder_input, login_input, profile_input, browse, add_button, save_button, profiles_button, users_button, button)
+    if preferences["default_profile"]:
+        profile_name.set(preferences["default_profile"])
+        apply_profile()
     root.bind("<Return>", lambda _event: submit())
     login_input.focus_set()
     if root.tk.call("tk", "windowingsystem") == "win32":
