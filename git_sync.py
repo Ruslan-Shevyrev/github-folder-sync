@@ -1,6 +1,27 @@
+import re
 from pathlib import Path
 
 from branches import BranchError, branch_refs, git, github_repository
+
+
+def corrected_origin(url, current):
+    match = re.fullmatch(r"https://github\.com/([A-Za-z0-9-]+/[A-Za-z0-9_.-]+)", url)
+    if not match:
+        raise BranchError("Не удалось определить адрес репозитория GitHub.")
+    repository = match[1]
+    if current.lower().startswith(("git@", "ssh://")):
+        return f"git@github.com:{repository}.git"
+    return f"https://github.com/{repository}.git"
+
+
+def change_origin(path, current, target):
+    root = git(str(path), "rev-parse", "--show-toplevel").stdout.strip()
+    if Path(root).resolve() != path.resolve():
+        raise BranchError("Локальный репозиторий изменился. Повторите сравнение.")
+    actual = git(str(path), "config", "--get", "remote.origin.url", allowed=(0, 1)).stdout.strip()
+    if actual != current:
+        raise BranchError("Origin уже изменился. Повторите сравнение.")
+    git(str(path), "remote", "set-url", "origin", target)
 
 
 def sync_from_github(path, url, branch):

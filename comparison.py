@@ -9,7 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from branches import Branch, BranchError, compare_branches
+from branches import Branch, BranchError, OriginMismatch, compare_branches
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,7 @@ class Match:
     github_url: str = ""
     branches: tuple[Branch, ...] = ()
     branch_error: str = ""
+    mismatched_origin: str = ""
 
     @property
     def status(self):
@@ -139,6 +140,9 @@ def compare(folder, login):
 
 def with_branches(row):
     try:
-        return replace(row, branches=compare_branches(row.local_path, row.github_url))
+        return replace(row, branches=compare_branches(row.local_path, row.github_url),
+                       branch_error="", mismatched_origin="")
+    except OriginMismatch as error:
+        return replace(row, branches=(), branch_error=str(error), mismatched_origin=error.origin)
     except BranchError as error:
-        return replace(row, branch_error=str(error))
+        return replace(row, branches=(), branch_error=str(error), mismatched_origin="")

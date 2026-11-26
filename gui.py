@@ -5,13 +5,16 @@ from queue import Empty, Queue
 from threading import Thread
 from tkinter import filedialog, ttk
 from pathlib import Path
+import re
+import os
+import webbrowser
 
 import customtkinter as ctk
 
 from branches import BranchError
 from dialog_position import center_windows_dialog
 from comparison import compare, delete_local_folder, refresh_repository, validate_login, with_branches
-from git_sync import clone_from_github, sync_from_github
+from git_sync import change_origin, clone_from_github, corrected_origin, sync_from_github
 from settings import load_settings, save_settings, settings_path
 from results_table import ResultsTable
 
@@ -663,7 +666,7 @@ def run():
                     candidate = Path(base_path).expanduser().absolute() / row.name
                     local_path = str(candidate) if candidate.is_dir() else ""
                     updated = replace(row, local_path=local_path, branches=(),
-                                      branch_error="Не удалось перепроверить ветки.")
+                                      branch_error="Не удалось перепроверить ветки.", mismatched_origin="")
                     if not updated.local_path and not updated.github_url:
                         updated = None
             results.put(("row_updated", (row, updated, "\n".join(errors))))
@@ -712,7 +715,40 @@ def run():
             on_cancel=lambda: set_busy(False),
         )
 
-    table = ResultsTable(panel, on_sync=request_sync, on_refresh=request_refresh, on_delete=request_delete)
+    def request_fix_origin(row):
+        if not can_update_row() or not row.mismatched_origin:
+            return
+        path = Path(row.local_path)
+        current = row.mismatched_origin
+        try:
+            target = corrected_origin(row.github_url, current)
+        except BranchError as error:
+            modal_message("Не удалось определить адрес", str(error), parent=root)
+            return
+        display_origin = re.sub(r"(?<=://)[^/\s@]+@", "***@", current)
+        command = f'git remote set-url origin "{target}"'
+        set_busy(True)
+        confirm_action(
+            root, "Исправление origin",
+            f"Текущий origin:\n{display_origin}\n\nКоманда:\n{command}",
+            "ОК",
+            lambda: run_row_action(row, "Исправление origin", lambda: change_origin(path, current, target)),
+            on_cancel=lambda: set_busy(False),
+        )
+
+    def open_local_folder(path):
+        try:
+            if not Path(path).is_dir():
+                raise FileNotFoundError(f"Папка недоступна: {path}")
+            if hasattr(os, "startfile"):
+                os.startfile(path)
+            else:
+                webbrowser.open(Path(path).as_uri())
+        except OSError as error:
+            modal_message("Не удалось открыть папку", str(error), parent=root)
+
+    table = ResultsTable(panel, on_sync=request_sync, on_refresh=request_refresh, on_delete=request_delete,
+                         on_fix_origin=request_fix_origin, on_open_folder=open_local_folder)
     table.grid(row=6, column=0, columnspan=3, sticky="nsew", padx=16)
     status_line = ctk.CTkFrame(panel, fg_color="transparent")
     status_line.grid(row=7, column=0, columnspan=3, sticky="ew", padx=16, pady=(8, 12))
@@ -728,7 +764,7 @@ def run():
     loader_label.pack(side="left", padx=(10, 0))
     loader_group.grid_remove()
 
-    label_widget(panel, text="Двойной щелчок по ссылке откроет репозиторий в браузере.",
+    label_widget(panel, text="Щелчок по ссылке откроет GitHub, а по локальному пути — папку.",
               muted=True).grid(row=5, column=0, columnspan=3, sticky="w", padx=16, pady=(5, 5))
 
     def load(path, account):
@@ -749,7 +785,7 @@ def run():
             if kind == "row":
                 table.add(value, STATUSES[value.status])
                 counts[value.status] += 1
-                status.set(f"Проверяем ветки… Обработано репозиториев: {sum(counts.values())}")
+                status.set(f"Обработано репозиториев: {sum(counts.values())}")
                 continue
             loader.stop()
             loader_group.grid_remove()

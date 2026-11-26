@@ -35,7 +35,8 @@ BRANCH_LABELS = {
 
 
 class ResultsTable(ctk.CTkFrame):
-    def __init__(self, parent, on_sync=None, on_refresh=None, on_delete=None):
+    def __init__(self, parent, on_sync=None, on_refresh=None, on_delete=None,
+                 on_fix_origin=None, on_open_folder=None):
         super().__init__(parent, fg_color="#101421", border_color="#343a50",
                          border_width=1, corner_radius=10)
         self.columnconfigure(0, weight=1)
@@ -52,6 +53,8 @@ class ResultsTable(ctk.CTkFrame):
         self.on_sync = on_sync
         self.on_refresh = on_refresh
         self.on_delete = on_delete
+        self.on_fix_origin = on_fix_origin
+        self.on_open_folder = on_open_folder
         self.actions_enabled = True
         self.columns = COLUMNS
         self.row_data = {}
@@ -110,6 +113,11 @@ class ResultsTable(ctk.CTkFrame):
     def bind_item(self, item, target, sequence, callback):
         token = self.canvas.tag_bind(target, sequence, callback)
         self.item_bindings.setdefault(item, []).append((target, sequence, token))
+
+    def bind_link(self, item, command):
+        self.bind_item(item, item, "<Enter>", lambda _: self.canvas.configure(cursor="hand2"))
+        self.bind_item(item, item, "<Leave>", lambda _: self.canvas.configure(cursor=""))
+        self.bind_item(item, item, "<Button-1>", lambda _: command())
 
     def delete_items(self, tag):
         for item in self.canvas.find_withtag(tag):
@@ -207,7 +215,9 @@ class ResultsTable(ctk.CTkFrame):
                 if column == "number":
                     number_item = item
                 if column == "github":
-                    self.bind_item(item, item, "<Double-1>", lambda _, url=value: webbrowser.open(url))
+                    self.bind_link(item, lambda url=value: webbrowser.open(url))
+                elif column == "path" and self.on_open_folder is not None:
+                    self.bind_link(item, lambda path=value: self.on_open_folder(path))
             x += width
         self.canvas.coords(backdrop, 0, top, self.width, bottom)
         last_item = self.canvas.create_line(0, bottom, self.width, bottom, fill="#343956")
@@ -315,7 +325,14 @@ class ResultsTable(ctk.CTkFrame):
                 bottom = max(bottom, self.canvas.bbox(button)[3])
             return bottom
         if row.branch_error or not row.branches:
-            item = self.text(x, y, row.branch_error or "—", BRANCH_COLORS["gray"], width)
+            can_fix = row.mismatched_origin and self.on_fix_origin is not None
+            color = "#d4baff" if can_fix else BRANCH_COLORS["gray"]
+            item = self.text(x, y, row.branch_error or "—", color, width)
+            if can_fix:
+                self.canvas.itemconfigure(item, disabledfill="#9297ac",
+                                          state="normal" if self.actions_enabled else "disabled")
+                self.canvas.addtag_withtag("row-action", item)
+                self.bind_link(item, lambda: self.on_fix_origin(row) if self.actions_enabled else None)
             return self.canvas.bbox(item)[3]
         for branch in row.branches:
             side_width = 175

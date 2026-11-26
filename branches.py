@@ -17,6 +17,12 @@ class BranchError(Exception):
     pass
 
 
+class OriginMismatch(BranchError):
+    def __init__(self, origin):
+        super().__init__("Origin ведёт на другой репозиторий.")
+        self.origin = origin
+
+
 def git(path, *args, allowed=(0,), input_text=None, timeout=20):
     command = ["git"]
     if path:
@@ -77,7 +83,7 @@ def compare_branches(path, url):
             if not origin:
                 raise BranchError("У локального репозитория отсутствует origin.")
             if github_repository(origin) != github_repository(url):
-                raise BranchError("Origin ведёт на другой репозиторий.")
+                raise OriginMismatch(origin)
         local = branch_refs(git(path, "for-each-ref", "--format=%(objectname)%09%(refname)", "refs/heads").stdout)
 
     remote = {}
