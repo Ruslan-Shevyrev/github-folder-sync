@@ -23,6 +23,10 @@ class Match:
     visibility: str = ""
 
     @property
+    def origin_mismatch(self):
+        return bool(self.local_path and self.github_url and self.branch_error == OriginMismatch.message)
+
+    @property
     def status(self):
         if self.local_path and self.github_url:
             return "both"

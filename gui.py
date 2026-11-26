@@ -11,11 +11,11 @@ import webbrowser
 
 import customtkinter as ctk
 
-from branches import BranchError
+from branches import BranchError, github_repository
 from comparison_cache import load_cache, profile_cache_path, save_cache
 from dialog_position import center_windows_dialog
 from comparison import compare, delete_local_folder, refresh_repository, validate_login, with_branches
-from git_sync import change_origin, clone_from_github, corrected_origin, sync_from_github
+from git_sync import change_origin, clone_from_github, corrected_origin, read_local_origin, sync_from_github
 from settings import load_settings, resolve_token, save_settings, settings_path, validate_token_reference
 from results_table import ResultsTable
 from wide_combobox import WideComboBox
@@ -219,8 +219,12 @@ def dialog_actions(dialog, frame, row, focus, save):
     dialog.bind("<Return>", lambda _: submit())
 
 
-TOKEN_HELP_TITLE = "Fine-grained personal access tokens"
-TOKEN_HELP_TEXT = "Read access to code and metadata"
+TOKEN_HELP_LINES = (
+    "Необходимо для приватных токенов",
+    "Fine-grained personal access tokens",
+    "Read access to code and metadata",
+    "Токен или v{ИМЯ_ПЕРЕМЕННОЙ}",
+)
 
 
 def token_help(parent, container):
@@ -241,17 +245,16 @@ def token_help(parent, container):
         tooltip.overrideredirect(True)
         frame = ctk.CTkFrame(tooltip, fg_color=FIELD, corner_radius=0)
         frame.pack(padx=1, pady=1)
-        label_widget(frame, text=TOKEN_HELP_TITLE).pack(
-            anchor="w", padx=10, pady=(4, 0)
+        label_widget(frame, text="\n".join(TOKEN_HELP_LINES), justify="left", anchor="w").pack(
+            padx=10, pady=5
         )
-        label_widget(frame, text=TOKEN_HELP_TEXT).pack(anchor="w", padx=10, pady=(0, 4))
         tooltip.update_idletasks()
         tooltip.geometry(f"+{event.x_root + 12}+{event.y_root + 18}")
         tooltip.deiconify()
 
     def open_help():
         hide()
-        modal_message(TOKEN_HELP_TITLE, TOKEN_HELP_TEXT, parent=parent, heading=False)
+        modal_message(TOKEN_HELP_LINES[0], "\n".join(TOKEN_HELP_LINES[1:]), parent=parent, heading=False)
 
     button = ctk.CTkButton(container, text="?", width=22, height=22, corner_radius=11,
                            border_width=1, border_color=BORDER, fg_color=FIELD,
@@ -272,13 +275,24 @@ def user_dialog(parent, on_save, *, login="", token=""):
     token_heading.grid(row=2, column=0, sticky="w")
     label_widget(token_heading, text="Токен GitHub (необязательно)").pack(side="left")
     token_help(dialog, token_heading)
-    token_input = dialog_entry(frame, token)
-    token_input.configure(show="*")
-    token_input.grid(row=3, column=0, sticky="ew", pady=(6, 0))
-    label_widget(frame, text="Токен или v{ИМЯ_ПЕРЕМЕННОЙ}", muted=True).grid(
-        row=4, column=0, sticky="w", pady=(0, 8)
-    )
-    dialog_actions(dialog, frame, 5, entry, lambda: on_save(entry.get().strip(), token_input.get().strip()))
+    token_row = ctk.CTkFrame(frame, fg_color="transparent")
+    token_row.grid(row=3, column=0, sticky="ew", pady=(6, 12))
+    token_row.columnconfigure(0, weight=1)
+    token_input = dialog_entry(token_row, token)
+    token_input.configure(show="*", width=308)
+    token_input.grid(row=0, column=0, sticky="ew")
+
+    def toggle_token():
+        reveal = bool(token_input.cget("show"))
+        token_input.configure(show="" if reveal else "*")
+        eye.configure(fg_color="#353d55" if reveal else FIELD)
+
+    eye = ctk.CTkButton(token_row, text="\U0001f441", width=34, height=34, corner_radius=8,
+                        border_width=1, border_color=BORDER, fg_color=FIELD,
+                        hover_color="#353d55", text_color=TEXT, font=("Segoe UI Symbol", 16),
+                        command=toggle_token)
+    eye.grid(row=0, column=1, padx=(8, 0))
+    dialog_actions(dialog, frame, 4, entry, lambda: on_save(entry.get().strip(), token_input.get().strip()))
 
 
 def profile_dialog(parent, profile, on_save, *, users=(), name="", is_default=False, editing=False):
@@ -338,6 +352,8 @@ def run():
         status.set(f"Не удалось прочитать настройки: {error}")
     results = Queue()
     counts = Counter()
+    all_rows = {}
+    only_problems = tk.BooleanVar(master=root, value=False)
     compared = None
     active_cache = None
 
@@ -790,13 +806,16 @@ def run():
         )
 
     def request_fix_origin(row):
-        if not can_update_row() or not row.mismatched_origin:
+        if not can_update_row() or not row.origin_mismatch:
             return
         path = Path(row.local_path)
-        current = row.mismatched_origin
         try:
+            current = read_local_origin(path)
+            if not current or github_repository(current) == github_repository(row.github_url):
+                request_refresh(row)
+                return
             target = corrected_origin(row.github_url, current)
-        except BranchError as error:
+        except (BranchError, OSError) as error:
             modal_message("Не удалось определить адрес", str(error), parent=root)
             return
         display_origin = re.sub(r"(?<=://)[^/\s@]+@", "***@", current)
@@ -840,13 +859,38 @@ def run():
 
     table_notes = ctk.CTkFrame(panel, fg_color="transparent")
     table_notes.grid(row=5, column=0, columnspan=3, sticky="ew", padx=16, pady=(5, 5))
-    table_notes.columnconfigure(0, weight=1)
-    label_widget(table_notes, text="Щелчок по ссылке откроет GitHub, а по локальному пути — папку.",
-                 muted=True).grid(row=0, column=0, sticky="w")
     cache_notice = label_widget(table_notes, text="Данные из кэша", muted=True)
     cache_notice.configure(text_color="#ff999f")
-    cache_notice.grid(row=0, column=1, sticky="e", padx=(12, 0))
+    cache_notice.grid(row=0, column=1, sticky="w", padx=(12, 0))
     cache_notice.grid_remove()
+    problem_filter = ctk.CTkCheckBox(
+        table_notes, text="Требуют внимания", variable=only_problems, font=FONT, text_color=TEXT,
+        fg_color=ACCENT, hover_color="#895dff", border_color=BORDER, command=lambda: redraw_rows(),
+    )
+    problem_filter.grid(row=0, column=0, sticky="w")
+
+    def is_visible(row):
+        return not only_problems.get() or (
+            row.status != "both" or bool(row.branch_error)
+            or any(branch.status != "equal" for branch in row.branches)
+        )
+
+    def add_result(row):
+        all_rows[row.name] = row
+        counts[row.status] += 1
+        if is_visible(row):
+            table.add(row, STATUSES[row.status])
+
+    def redraw_rows():
+        table.clear()
+        for row in all_rows.values():
+            if is_visible(row):
+                table.add(row, STATUSES[row.status])
+
+    def reset_results():
+        all_rows.clear()
+        counts.clear()
+        table.clear()
 
     def selected_cache_path():
         name = profile_name.get()
@@ -860,14 +904,13 @@ def run():
         return profile_cache_path(preferences_path, name, path, login.get(), authenticated)
 
     def summary_text():
-        return "  ·  ".join(f"{label} — {counts[key]}" for key, (label, _, _) in STATUSES.items())
+        return "  ·  ".join(f"{label}: {counts[key]}" for key, (label, _, _) in STATUSES.items())
 
     def show_profile_cache():
         nonlocal compared, active_cache
         compared = None
         active_cache = None
-        table.clear()
-        counts.clear()
+        reset_results()
         cache_notice.grid_remove()
         path = selected_cache_path()
         rows = load_cache(path) if path is not None else None
@@ -878,8 +921,7 @@ def run():
         compared = (folder.get().strip(), login.get(), None)
         active_cache = path
         for row in rows:
-            table.add(row, STATUSES[row.status])
-            counts[row.status] += 1
+            add_result(row)
         cache_notice.grid()
         status.set(summary_text())
 
@@ -887,7 +929,7 @@ def run():
         if active_cache is None:
             return ""
         try:
-            save_cache(active_cache, (row for row, _ in table.row_data.values()))
+            save_cache(active_cache, all_rows.values())
         except OSError:
             return "  ·  Не удалось сохранить кэш."
         return ""
@@ -908,8 +950,7 @@ def run():
             except Empty:
                 break
             if kind == "row":
-                table.add(value, STATUSES[value.status])
-                counts[value.status] += 1
+                add_result(value)
                 status.set(f"Обработано репозиториев: {sum(counts.values())}")
                 continue
             loader.stop()
@@ -920,10 +961,17 @@ def run():
                 if updated is not previous:
                     counts[previous.status] -= 1
                     if updated is None:
-                        table.update_row(previous.name)
+                        all_rows.pop(previous.name, None)
                     else:
-                        table.update_row(previous.name, updated, STATUSES[updated.status])
+                        all_rows[previous.name] = updated
                         counts[updated.status] += 1
+                    if previous.name in table.rows:
+                        if updated is not None and is_visible(updated):
+                            table.update_row(previous.name, updated, STATUSES[updated.status])
+                        else:
+                            table.update_row(previous.name)
+                    elif updated is not None and is_visible(updated):
+                        redraw_rows()
                 if error:
                     status.set(error)
                     modal_message("Не удалось завершить действие", error, parent=root)
@@ -954,8 +1002,7 @@ def run():
         compared = (path, account, token)
         active_cache = selected_cache_path()
         cache_notice.grid_remove()
-        table.clear()
-        counts.clear()
+        reset_results()
         status.set("Сравниваем папки с репозиториями GitHub…")
         show_loader("Сравнение")
         Thread(target=load, args=(path, account, token), daemon=True).start()
@@ -963,7 +1010,8 @@ def run():
 
     button = button_widget(panel, text="Сравнить", primary=True, command=submit)
     button.grid(row=4, column=2, sticky="ew", padx=(0, 16), pady=(8, 0))
-    controls = (folder_input, login_input, profile_input, browse, add_button, save_button, profiles_button, users_button, button)
+    controls = (folder_input, login_input, profile_input, browse, add_button, save_button,
+                profiles_button, users_button, problem_filter, button)
     if preferences["default_profile"]:
         profile_name.set(preferences["default_profile"])
         apply_profile()

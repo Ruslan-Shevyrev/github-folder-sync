@@ -19,8 +19,10 @@ class BranchError(Exception):
 
 
 class OriginMismatch(BranchError):
+    message = "Origin ведёт на другой репозиторий."
+
     def __init__(self, origin):
-        super().__init__("Origin ведёт на другой репозиторий.")
+        super().__init__(self.message)
         self.origin = origin
 
 

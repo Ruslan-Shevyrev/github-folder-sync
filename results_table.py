@@ -330,6 +330,8 @@ class ResultsTable(ctk.CTkFrame):
             hint = "git fetch — создать локальную ветку"
         else:
             hint = "git pull"
+        if branch is not None:
+            hint += f"\nВетка: {branch.name}"
         return self.draw_button(x, y, "↓", 28, lambda: self.on_sync(row, branch), hint=hint)
 
     def draw_branches(self, row, x, y, width, sync_x):
@@ -341,7 +343,7 @@ class ResultsTable(ctk.CTkFrame):
                 bottom = max(bottom, self.canvas.bbox(button)[3])
             return bottom
         if row.branch_error or not row.branches:
-            can_fix = row.mismatched_origin and self.on_fix_origin is not None
+            can_fix = row.origin_mismatch and self.on_fix_origin is not None
             color = "#d4baff" if can_fix else BRANCH_COLORS["gray"]
             item = self.text(x, y, row.branch_error or "—", color, width)
             if can_fix:

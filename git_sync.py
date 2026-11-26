@@ -14,12 +14,15 @@ def corrected_origin(url, current):
     return f"https://github.com/{repository}.git"
 
 
-def change_origin(path, current, target):
+def read_local_origin(path):
     root = git(str(path), "rev-parse", "--show-toplevel").stdout.strip()
     if Path(root).resolve() != path.resolve():
         raise BranchError("Локальный репозиторий изменился. Повторите сравнение.")
-    actual = git(str(path), "config", "--get", "remote.origin.url", allowed=(0, 1)).stdout.strip()
-    if actual != current:
+    return git(str(path), "config", "--get", "remote.origin.url", allowed=(0, 1)).stdout.strip()
+
+
+def change_origin(path, current, target):
+    if read_local_origin(path) != current:
         raise BranchError("Origin уже изменился. Повторите сравнение.")
     git(str(path), "remote", "set-url", "origin", target)
 
