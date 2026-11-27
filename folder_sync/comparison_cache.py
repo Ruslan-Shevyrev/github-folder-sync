@@ -4,9 +4,9 @@ import re
 from dataclasses import asdict
 from pathlib import Path
 
-from branches import Branch
-from comparison import Match
-from settings import save_settings
+from .branches import Branch
+from .comparison import Match
+from .settings import save_settings
 
 
 def profile_cache_path(settings_file, name, folder, login, authenticated):
@@ -51,6 +51,11 @@ def reconcile_cache(settings_file, preferences, renamed=None):
                 file.unlink(missing_ok=True)
         except OSError:
             continue
+
+
+def save_preferences(path, data, renamed=None):
+    save_settings(path, data)
+    reconcile_cache(path, data, renamed)
 
 
 def load_cache(path):

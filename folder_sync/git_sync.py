@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from branches import BranchError, branch_refs, git, github_git, github_repository
+from .branches import BranchError, branch_refs, git, github_git, github_repository
 
 
 def corrected_origin(url, current):

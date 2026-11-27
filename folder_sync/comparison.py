@@ -9,7 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from branches import Branch, BranchError, OriginMismatch, compare_branches
+from .branches import Branch, BranchError, OriginMismatch, compare_branches
 
 
 @dataclass(frozen=True)

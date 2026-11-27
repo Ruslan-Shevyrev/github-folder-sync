@@ -2,8 +2,8 @@ import tkinter as tk
 import webbrowser
 import customtkinter as ctk
 
-from app_theme import theme_color
-from localization import error_text, tr
+from .app_theme import theme_color
+from .localization import error_text, tr
 
 
 COLUMNS = (

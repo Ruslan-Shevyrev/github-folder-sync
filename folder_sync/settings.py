@@ -7,8 +7,11 @@ from tempfile import NamedTemporaryFile
 
 
 def settings_path():
-    launch_file = sys.executable if getattr(sys, "frozen", False) else __file__
-    return Path(launch_file).resolve().parent / "settings" / "settings.json"
+    if getattr(sys, "frozen", False):
+        directory = Path(sys.executable).resolve().parent
+    else:
+        directory = Path(__file__).resolve().parents[1]
+    return directory / "settings" / "settings.json"
 
 
 def validate_token_reference(value):
