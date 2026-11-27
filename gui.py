@@ -12,6 +12,7 @@ import webbrowser
 import customtkinter as ctk
 
 from branches import BranchError, github_repository
+from localization import LANGUAGES, error_text, set_language, tr
 from comparison_cache import load_cache, profile_cache_path, save_cache
 from dialog_position import center_windows_dialog
 from comparison import compare, delete_local_folder, refresh_repository, validate_login, with_branches
@@ -140,7 +141,7 @@ def confirm_action(parent, title, details, button_text, on_confirm, *, destructi
                  justify="left", anchor="w", wraplength=460).grid(row=1, column=0, sticky="ew")
     actions = ctk.CTkFrame(frame, fg_color="transparent")
     actions.grid(row=2, column=0, sticky="e", pady=(16, 0))
-    cancel = button_widget(actions, text="Отмена")
+    cancel = button_widget(actions, text=tr('Отмена'))
     cancel.pack(side="left", padx=(0, 6))
     confirm = button_widget(actions, text=button_text, primary=True)
     if destructive:
@@ -167,13 +168,14 @@ def confirm_action(parent, title, details, button_text, on_confirm, *, destructi
 
 
 def modal_message(title, details, *, parent, question=False, warning=False, heading=True):
+    details = error_text(details)
     answer = False
     if question:
         def accept():
             nonlocal answer
             answer = True
 
-        dialog = confirm_action(parent, title, details, "Подтвердить", accept, destructive=warning)
+        dialog = confirm_action(parent, title, details, tr('Подтвердить'), accept, destructive=warning)
     else:
         dialog, frame = create_dialog(parent, title)
         label_widget(frame, text=title, heading=heading).pack(anchor="w", pady=(0, 10))
@@ -200,9 +202,9 @@ def dialog_entry(frame, value="", *, readonly=False):
 def dialog_actions(dialog, frame, row, focus, save):
     actions = ctk.CTkFrame(frame, fg_color="transparent")
     actions.grid(row=row, column=0, columnspan=3, sticky="e")
-    cancel = button_widget(actions, text="Отмена")
+    cancel = button_widget(actions, text=tr('Отмена'))
     cancel.pack(side="left", padx=(0, 6))
-    save_button = button_widget(actions, text="Сохранить", primary=True)
+    save_button = button_widget(actions, text=tr('Сохранить'), primary=True)
     save_button.pack(side="left")
     close = show_dialog(dialog, focus)
     cancel.configure(command=close)
@@ -212,7 +214,7 @@ def dialog_actions(dialog, frame, row, focus, save):
             if save():
                 close()
         except (OSError, ValueError, RuntimeError) as error:
-            modal_message("Не удалось сохранить", str(error), parent=dialog)
+            modal_message(tr('Не удалось сохранить'), str(error), parent=dialog)
         return "break"
 
     save_button.configure(command=submit)
@@ -245,7 +247,7 @@ def token_help(parent, container):
         tooltip.overrideredirect(True)
         frame = ctk.CTkFrame(tooltip, fg_color=FIELD, corner_radius=0)
         frame.pack(padx=1, pady=1)
-        label_widget(frame, text="\n".join(TOKEN_HELP_LINES), justify="left", anchor="w").pack(
+        label_widget(frame, text="\n".join(map(tr, TOKEN_HELP_LINES)), justify="left", anchor="w").pack(
             padx=10, pady=5
         )
         tooltip.update_idletasks()
@@ -254,7 +256,7 @@ def token_help(parent, container):
 
     def open_help():
         hide()
-        modal_message(TOKEN_HELP_LINES[0], "\n".join(TOKEN_HELP_LINES[1:]), parent=parent, heading=False)
+        modal_message(tr(TOKEN_HELP_LINES[0]), "\n".join(map(tr, TOKEN_HELP_LINES[1:])), parent=parent, heading=False)
 
     button = ctk.CTkButton(container, text="?", width=22, height=22, corner_radius=11,
                            border_width=1, border_color=BORDER, fg_color=FIELD,
@@ -266,14 +268,14 @@ def token_help(parent, container):
 
 
 def user_dialog(parent, on_save, *, login="", token=""):
-    title = "Редактирование пользователя" if login else "Добавить пользователя"
+    title = tr('Редактирование пользователя') if login else tr('Добавить пользователя')
     dialog, frame = create_dialog(parent, title)
-    label_widget(frame, text="Логин GitHub").grid(row=0, column=0, sticky="w")
+    label_widget(frame, text=tr('Логин GitHub')).grid(row=0, column=0, sticky="w")
     entry = dialog_entry(frame, login)
     entry.grid(row=1, column=0, sticky="ew", pady=(6, 10))
     token_heading = ctk.CTkFrame(frame, fg_color="transparent")
     token_heading.grid(row=2, column=0, sticky="w")
-    label_widget(token_heading, text="Токен GitHub (необязательно)").pack(side="left")
+    label_widget(token_heading, text=tr('Токен GitHub (необязательно)')).pack(side="left")
     token_help(dialog, token_heading)
     token_row = ctk.CTkFrame(frame, fg_color="transparent")
     token_row.grid(row=3, column=0, sticky="ew", pady=(6, 12))
@@ -296,7 +298,7 @@ def user_dialog(parent, on_save, *, login="", token=""):
 
 
 def profile_dialog(parent, profile, on_save, *, users=(), name="", is_default=False, editing=False):
-    title = "Редактирование профиля" if editing else "Сохранение профиля"
+    title = tr('Редактирование профиля') if editing else tr('Сохранение профиля')
     dialog, frame = create_dialog(parent, title)
     frame.columnconfigure(1, weight=1)
     name_input = dialog_entry(frame, name)
@@ -307,9 +309,9 @@ def profile_dialog(parent, profile, on_save, *, users=(), name="", is_default=Fa
     else:
         account_input = dialog_entry(frame, profile["login"], readonly=True)
     for row, (label, field) in enumerate((
-        ("Имя профиля", name_input),
-        ("Пользователь GitHub", account_input),
-        ("Локальная папка", path_input),
+        (tr('Имя профиля'), name_input),
+        (tr('Пользователь GitHub'), account_input),
+        (tr('Локальная папка'), path_input),
     )):
         label_widget(frame, text=label).grid(row=row, column=0, sticky="w", padx=(0, 10), pady=(0, 8))
         field.grid(row=row, column=1, sticky="ew", pady=(0, 8))
@@ -321,10 +323,10 @@ def profile_dialog(parent, profile, on_save, *, users=(), name="", is_default=Fa
                 path_input.delete(0, "end")
                 path_input.insert(0, path)
 
-        button_widget(frame, text="Обзор…", command=browse).grid(row=2, column=2, padx=(8, 0), pady=(0, 8))
+        button_widget(frame, text=tr('Обзор…'), command=browse).grid(row=2, column=2, padx=(8, 0), pady=(0, 8))
 
     default = tk.BooleanVar(master=dialog, value=is_default)
-    ctk.CTkCheckBox(frame, font=FONT, fg_color=ACCENT, hover_color="#895dff", border_color=BORDER, text_color=TEXT, text="Настройки по умолчанию", variable=default).grid(
+    ctk.CTkCheckBox(frame, font=FONT, fg_color=ACCENT, hover_color="#895dff", border_color=BORDER, text_color=TEXT, text=tr('Настройки по умолчанию'), variable=default).grid(
         row=3, column=1, sticky="w", pady=(0, 10)
     )
     dialog_actions(dialog, frame, 4, name_input, lambda: on_save(
@@ -333,48 +335,90 @@ def profile_dialog(parent, profile, on_save, *, users=(), name="", is_default=Fa
 
 
 def run():
+    try:
+        language = load_settings(settings_path()).get("language")
+    except (OSError, ValueError):
+        language = None
+    if language not in ("ru", "en"):
+        language = "ru"
     ctk.set_appearance_mode("dark")
     root = ctk.CTk(fg_color=BACKGROUND)
-    root.title("Папки и репозитории GitHub")
     root.geometry("1080x560")
     root.minsize(760, 360)
     configure_theme(root)
+    snapshot = None
+    while True:
+        set_language(language)
+        result = run_window(root, language, snapshot)
+        if result is None:
+            break
+        language, snapshot = result
 
+
+def run_window(root, language, snapshot=None):
+    root.title(tr('Папки и репозитории GitHub'))
     folder = tk.StringVar()
     login = tk.StringVar()
     profile_name = tk.StringVar()
-    status = tk.StringVar(value="Выберите папку и сохранённого пользователя GitHub.")
+    status = tk.StringVar(value=tr('Выберите папку и сохранённого пользователя GitHub.'))
     preferences_path = settings_path()
     try:
         preferences = load_settings(preferences_path)
     except (OSError, ValueError) as error:
         preferences = {"users": {}, "profiles": {}, "default_profile": None}
-        status.set(f"Не удалось прочитать настройки: {error}")
+        status.set(tr('Не удалось прочитать настройки: {error}', error=error_text(str(error))))
     results = Queue()
     counts = Counter()
     all_rows = {}
     only_problems = tk.BooleanVar(master=root, value=False)
     compared = None
     active_cache = None
+    from_cache = False
+
+    next_window = None
+
+    def switch_language(chosen):
+        nonlocal next_window
+        selected = next(code for code, label in LANGUAGES.items() if label == chosen)
+        if selected == language:
+            return
+        try:
+            data = load_settings(preferences_path)
+            data["language"] = selected
+            save_settings(preferences_path, data)
+        except (OSError, ValueError) as error:
+            language_display.set(LANGUAGES[language])
+            modal_message(tr("Не удалось сохранить"), str(error), parent=root)
+            return
+        next_window = (selected, {
+            "folder": folder.get(), "login": login.get(), "profile": profile_name.get(),
+            "only_problems": only_problems.get(), "rows": list(all_rows.values()),
+            "cached": from_cache, "compared": compared, "cache": active_cache,
+        })
+        root.quit()
 
     panel = ctk.CTkFrame(root, fg_color=PANEL, corner_radius=12, border_width=1, border_color="#30374d")
     panel.pack(fill="both", expand=True, padx=12, pady=12)
     panel.grid_propagate(False)
     panel.columnconfigure(1, weight=1)
     panel.rowconfigure(6, weight=1)
-    label_widget(panel, text="Репозитории GitHub", heading=True).grid(
+    language_display = tk.StringVar(master=root, value=LANGUAGES[language])
+    language_picker = combo_widget(panel, variable=language_display, values=list(LANGUAGES.values()),
+                                   width=135, command=switch_language)
+    language_picker.grid(row=0, column=2, sticky="e", padx=(0, 16), pady=(14, 12))
+    label_widget(panel, text=tr('Репозитории GitHub'), heading=True).grid(
         row=0, column=0, columnspan=3, sticky="w", padx=(16, 0), pady=(14, 12)
     )
-    label_widget(panel, text="Пользователь GitHub").grid(row=1, column=0, sticky="w", padx=(16, 4))
+    label_widget(panel, text=tr('Пользователь GitHub')).grid(row=1, column=0, sticky="w", padx=(16, 4))
     login_input = combo_widget(panel, variable=login, values=[])
     login_input.grid(row=1, column=1, sticky="ew", padx=8)
-    label_widget(panel, text="Локальная папка").grid(row=2, column=0, sticky="w", padx=(16, 4))
+    label_widget(panel, text=tr('Локальная папка')).grid(row=2, column=0, sticky="w", padx=(16, 4))
     folder_input = entry_widget(panel, textvariable=folder)
     folder_input.grid(row=2, column=1, sticky="ew", padx=8, pady=8)
     if root.tk.call("tk", "windowingsystem") == "win32":
         folder_input.bind("<Control-KeyPress>", edit_shortcut_on_windows)
 
-    label_widget(panel, text="Профиль").grid(row=3, column=0, sticky="w", padx=(16, 4))
+    label_widget(panel, text=tr('Профиль')).grid(row=3, column=0, sticky="w", padx=(16, 4))
     profile_input = combo_widget(panel, variable=profile_name, values=[])
     profile_input.grid(row=3, column=1, sticky="ew", padx=8)
 
@@ -405,7 +449,7 @@ def run():
         refresh_choices()
         login.set(existing or name)
         profile_name.set("")
-        status.set("Пользователь выбран.")
+        status.set(tr('Пользователь выбран.'))
         return True
 
     def open_users():
@@ -413,14 +457,14 @@ def run():
         try:
             preferences = load_settings(preferences_path)
         except (OSError, ValueError) as error:
-            modal_message("Не удалось открыть список пользователей", str(error), parent=root)
+            modal_message(tr('Не удалось открыть список пользователей'), str(error), parent=root)
             return
         refresh_choices()
-        dialog, frame = create_dialog(root, "Просмотр пользователей", resizable=True)
+        dialog, frame = create_dialog(root, tr('Просмотр пользователей'), resizable=True)
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
         table = ttk.Treeview(frame, columns=("login",), show="headings", selectmode="browse", height=8)
-        table.heading("login", text="Пользователь GitHub", anchor="w")
+        table.heading("login", text=tr('Пользователь GitHub'), anchor="w")
         table.column("login", width=360, minwidth=180)
         scrollbar = ctk.CTkScrollbar(frame, orientation="vertical", command=table.yview)
         table.configure(yscrollcommand=scrollbar.set)
@@ -457,9 +501,9 @@ def run():
                 data = load_settings(preferences_path)
                 users = data["users"]
                 if original not in users:
-                    raise ValueError("Этот пользователь больше не сохранён.")
+                    raise ValueError(tr('Этот пользователь больше не сохранён.'))
                 if any(user != original and user.casefold() == name.casefold() for user in users):
-                    raise ValueError("Пользователь с таким логином уже сохранён.")
+                    raise ValueError(tr('Пользователь с таким логином уже сохранён.'))
                 if name != original:
                     users[name] = users.pop(original)
                     for profile in data["profiles"].values():
@@ -475,7 +519,7 @@ def run():
                     login.set(name)
                 refresh_choices()
                 refresh(name)
-                status.set(f"Логин «{name}» сохранён.")
+                status.set(tr('Логин «{name}» сохранён.', name=name))
                 return True
 
             user_dialog(dialog, save, login=original, token=preferences["users"][original].get("token", ""))
@@ -487,8 +531,8 @@ def run():
                 return
             name = selection[0]
             if not modal_message(
-                "Удаление пользователя",
-                f"Удалить пользователя «{name}» и все связанные с ним профили?",
+                tr('Удаление пользователя'),
+                tr('Удалить пользователя «{name}» и все связанные с ним профили?', name=name),
                 parent=dialog, question=True, warning=True,
             ):
                 return
@@ -503,7 +547,7 @@ def run():
                     data["default_profile"] = None
                 save_settings(preferences_path, data)
             except (OSError, ValueError) as error:
-                modal_message("Не удалось удалить пользователя", str(error), parent=dialog)
+                modal_message(tr('Не удалось удалить пользователя'), str(error), parent=dialog)
                 return
             preferences = data
             if login.get() == name:
@@ -512,7 +556,7 @@ def run():
                 profile_name.set("")
             refresh_choices()
             refresh(login.get())
-            status.set(f"Пользователь «{name}» и его профили удалены.")
+            status.set(tr('Пользователь «{name}» и его профили удалены.', name=name))
 
         def edit_row(event):
             item = table.identify_row(event.y)
@@ -520,11 +564,11 @@ def run():
                 table.selection_set(item)
                 edit()
 
-        edit_button = button_widget(actions, text="Редактировать", command=edit)
+        edit_button = button_widget(actions, text=tr('Редактировать'), command=edit)
         edit_button.pack(side="left")
-        delete_button = button_widget(actions, text="Удалить", command=delete)
+        delete_button = button_widget(actions, text=tr('Удалить'), command=delete)
         delete_button.pack(side="left", padx=6)
-        close_button = button_widget(actions, text="Закрыть")
+        close_button = button_widget(actions, text=tr('Закрыть'))
         close_button.pack(side="right")
         table.bind("<<TreeviewSelect>>", update_actions)
         table.bind("<Double-1>", edit_row)
@@ -534,20 +578,20 @@ def run():
     def save_profile(name, account, folder_path, default, *, original=None):
         nonlocal preferences
         if not name:
-            raise ValueError("Введите имя профиля.")
+            raise ValueError(tr('Введите имя профиля.'))
         if not folder_path:
-            raise ValueError("Укажите локальную папку.")
+            raise ValueError(tr('Укажите локальную папку.'))
         data = load_settings(preferences_path)
         if account not in data["users"]:
-            raise ValueError("Выберите сохранённого пользователя GitHub.")
+            raise ValueError(tr('Выберите сохранённого пользователя GitHub.'))
         profiles = data["profiles"]
         if original is not None and original not in profiles:
-            raise ValueError("Этот профиль уже удалён.")
+            raise ValueError(tr('Этот профиль уже удалён.'))
         if name in profiles and name != original:
             if original is not None:
-                raise ValueError("Профиль с таким именем уже существует.")
+                raise ValueError(tr('Профиль с таким именем уже существует.'))
             if not modal_message(
-                "Профиль уже существует", f"Заменить профиль «{name}»?", parent=root.grab_current(), question=True
+                tr('Профиль уже существует'), tr('Заменить профиль «{name}»?', name=name), parent=root.grab_current(), question=True
             ):
                 return False
         path = str(Path(folder_path).expanduser().absolute())
@@ -564,14 +608,14 @@ def run():
         if original is None or profile_name.get() == original:
             profile_name.set(name)
             apply_profile()
-        status.set(f"Профиль «{name}» сохранён.")
+        status.set(tr('Профиль «{name}» сохранён.', name=name))
         return True
 
     def open_profile_dialog():
         path = folder.get().strip()
         account = login.get()
         if not path or not account:
-            modal_message("Сохранение профиля", "Укажите папку и выберите пользователя GitHub.", parent=root)
+            modal_message(tr('Сохранение профиля'), tr('Укажите папку и выберите пользователя GitHub.'), parent=root)
             return
         profile_dialog(root, {"folder": path, "login": account}, save_profile)
 
@@ -580,19 +624,19 @@ def run():
         try:
             preferences = load_settings(preferences_path)
         except (OSError, ValueError) as error:
-            modal_message("Не удалось открыть профили", str(error), parent=root)
+            modal_message(tr('Не удалось открыть профили'), str(error), parent=root)
             return
         refresh_choices()
-        dialog, frame = create_dialog(root, "Просмотр профилей", resizable=True)
+        dialog, frame = create_dialog(root, tr('Просмотр профилей'), resizable=True)
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
         table = ttk.Treeview(frame, columns=("name", "login", "folder", "default"), show="headings",
                              selectmode="browse", height=8)
         columns = (
-            ("name", "Имя профиля", 150),
-            ("login", "Пользователь GitHub", 160),
-            ("folder", "Локальная папка", 300),
-            ("default", "По умолчанию", 110),
+            ("name", tr('Имя профиля'), 150),
+            ("login", tr('Пользователь GitHub'), 160),
+            ("folder", tr('Локальная папка'), 300),
+            ("default", tr('По умолчанию'), 110),
         )
         for column, label, width in columns:
             table.heading(column, text=label, anchor="w")
@@ -610,7 +654,7 @@ def run():
             table.delete(*table.get_children())
             for name in sorted(preferences["profiles"], key=str.casefold):
                 profile = preferences["profiles"][name]
-                default = "Да" if name == preferences["default_profile"] else "—"
+                default = tr('Да') if name == preferences["default_profile"] else "—"
                 table.insert("", "end", iid=name, values=(name, profile["login"], profile["folder"], default))
             if selected is not None and table.exists(selected):
                 table.selection_set(selected)
@@ -645,7 +689,7 @@ def run():
             if not selection:
                 return
             name = selection[0]
-            if not modal_message("Удаление профиля", f"Удалить профиль «{name}»?", parent=dialog, question=True, warning=True):
+            if not modal_message(tr('Удаление профиля'), tr('Удалить профиль «{name}»?', name=name), parent=dialog, question=True, warning=True):
                 return
             try:
                 data = load_settings(preferences_path)
@@ -654,20 +698,20 @@ def run():
                     data["default_profile"] = None
                 save_settings(preferences_path, data)
             except (OSError, ValueError) as error:
-                modal_message("Не удалось удалить профиль", str(error), parent=dialog)
+                modal_message(tr('Не удалось удалить профиль'), str(error), parent=dialog)
                 return
             preferences = data
             if profile_name.get() == name:
                 profile_name.set("")
             refresh_choices()
             refresh()
-            status.set(f"Профиль «{name}» удалён.")
+            status.set(tr('Профиль «{name}» удалён.', name=name))
 
-        edit_button = button_widget(actions, text="Редактировать", command=edit)
+        edit_button = button_widget(actions, text=tr('Редактировать'), command=edit)
         edit_button.pack(side="left")
-        delete_button = button_widget(actions, text="Удалить", command=delete)
+        delete_button = button_widget(actions, text=tr('Удалить'), command=delete)
         delete_button.pack(side="left", padx=6)
-        close_button = button_widget(actions, text="Закрыть")
+        close_button = button_widget(actions, text=tr('Закрыть'))
         close_button.pack(side="right")
         table.bind("<<TreeviewSelect>>", update_actions)
 
@@ -681,25 +725,25 @@ def run():
         refresh(profile_name.get())
         close_button.configure(command=show_dialog(dialog, table))
 
-    add_button = button_widget(panel, text="Добавить пользователя", command=lambda: user_dialog(root, add_user))
+    add_button = button_widget(panel, text=tr('Добавить пользователя'), command=lambda: user_dialog(root, add_user))
     add_button.grid(row=1, column=2, sticky="ew", padx=(0, 16))
-    save_button = button_widget(panel, text="Сохранить", command=open_profile_dialog)
+    save_button = button_widget(panel, text=tr('Сохранить'), command=open_profile_dialog)
     save_button.grid(row=3, column=2, sticky="ew", padx=(0, 16))
     navigation = ctk.CTkFrame(panel, fg_color="transparent")
     navigation.grid(row=4, column=1, sticky="e", padx=8, pady=(8, 0))
-    users_button = button_widget(navigation, text="Просмотр пользователей", command=open_users)
+    users_button = button_widget(navigation, text=tr('Просмотр пользователей'), command=open_users)
     users_button.pack(side="left", padx=(0, 6))
-    profiles_button = button_widget(navigation, text="Просмотр профилей", command=open_profiles)
+    profiles_button = button_widget(navigation, text=tr('Просмотр профилей'), command=open_profiles)
     profiles_button.pack(side="left")
     profile_input.configure(command=apply_profile)
     refresh_choices()
 
     def choose_folder():
-        selected = filedialog.askdirectory(parent=root, title="Выберите папку", mustexist=True)
+        selected = filedialog.askdirectory(parent=root, title=tr('Выберите папку'), mustexist=True)
         if selected:
             folder.set(selected)
 
-    browse = button_widget(panel, text="Обзор…", command=choose_folder)
+    browse = button_widget(panel, text=tr('Обзор…'), command=choose_folder)
     browse.grid(row=2, column=2, sticky="ew", padx=(0, 16))
 
     def current_token():
@@ -716,7 +760,7 @@ def run():
             return False
         selection = (folder.get().strip(), login.get())
         if compared is None or compared[:2] != selection or compared[2] not in (None, token):
-            modal_message("Сравнение устарело", "Сначала повторите сравнение для выбранных настроек.",
+            modal_message(tr('Сравнение устарело'), tr('Сначала повторите сравнение для выбранных настроек.'),
                                 parent=root)
             return False
         compared = (*selection, token)
@@ -746,11 +790,11 @@ def run():
                 try:
                     operation()
                 except (BranchError, OSError, ValueError) as error:
-                    errors.append(str(error))
+                    errors.append(error_text(str(error)))
             try:
                 updated = refresh_repository(base_path, account, row.name, token)
             except (OSError, ValueError, TypeError, KeyError) as error:
-                errors.append(str(error))
+                errors.append(error_text(str(error)))
                 updated = row
                 if operation is not None:
                     candidate = Path(base_path).expanduser().absolute() / row.name
@@ -766,7 +810,7 @@ def run():
 
     def request_refresh(row):
         if can_update_row():
-            run_row_action(row, "Обновление строки")
+            run_row_action(row, tr('Обновление строки'))
 
     def request_delete(row):
         if not can_update_row() or not row.local_path:
@@ -775,10 +819,10 @@ def run():
         base_path = compared[0]
         set_busy(True)
         confirm_action(
-            root, "Удаление локальной папки",
-            f"Папка, все её файлы и локальные коммиты будут удалены безвозвратно.\n\n{path}",
-            "Удалить",
-            lambda: run_row_action(row, "Удаление", lambda: delete_local_folder(base_path, path)),
+            root, tr('Удаление локальной папки'),
+            tr('Папка, все её файлы и локальные коммиты будут удалены безвозвратно.\n\n{path}', path=path),
+            tr('Удалить'),
+            lambda: run_row_action(row, tr('Удаление'), lambda: delete_local_folder(base_path, path)),
             destructive=True, on_cancel=lambda: set_busy(False),
         )
 
@@ -787,17 +831,17 @@ def run():
             return
         if row.local_path:
             destination = Path(row.local_path)
-            action = "Создать локальную ветку" if branch.status == "github" else "Обновить через git pull"
+            action = tr('Создать локальную ветку') if branch.status == "github" else tr('Обновить через git pull')
             operation = sync_from_github
-            progress_text = "Создание ветки" if branch.status == "github" else "Мерж (git pull)"
-            button_text = "Создать ветку" if branch.status == "github" else "Обновить"
+            progress_text = tr('Создание ветки') if branch.status == "github" else tr('Мерж (git pull)')
+            button_text = tr('Создать ветку') if branch.status == "github" else tr('Обновить')
         else:
             destination = Path(compared[0]).expanduser().absolute() / row.name
-            action = "Клонировать репозиторий"
+            action = tr('Клонировать репозиторий')
             operation = clone_from_github
-            progress_text = "Клонирование"
-            button_text = "Клонировать"
-        branch_line = f"\nВетка: {branch.name}" if branch else ""
+            progress_text = tr('Клонирование')
+            button_text = tr('Клонировать')
+        branch_line = tr('\nВетка: {branch_name}', branch_name=branch.name) if branch else ""
         set_busy(True)
         confirm_action(
             root, action, f"{row.name}{branch_line}\n\n{destination}", button_text,
@@ -816,29 +860,29 @@ def run():
                 return
             target = corrected_origin(row.github_url, current)
         except (BranchError, OSError) as error:
-            modal_message("Не удалось определить адрес", str(error), parent=root)
+            modal_message(tr('Не удалось определить адрес'), str(error), parent=root)
             return
         display_origin = re.sub(r"(?<=://)[^/\s@]+@", "***@", current)
         command = f'git remote set-url origin "{target}"'
         set_busy(True)
         confirm_action(
-            root, "Исправление origin",
-            f"Текущий origin:\n{display_origin}\n\nКоманда:\n{command}",
-            "ОК",
-            lambda: run_row_action(row, "Исправление origin", lambda: change_origin(path, current, target)),
+            root, tr('Исправление origin'),
+            tr('Текущий origin:\n{display_origin}\n\nКоманда:\n{command}', display_origin=display_origin, command=command),
+            tr('ОК'),
+            lambda: run_row_action(row, tr('Исправление origin'), lambda: change_origin(path, current, target)),
             on_cancel=lambda: set_busy(False),
         )
 
     def open_local_folder(path):
         try:
             if not Path(path).is_dir():
-                raise FileNotFoundError(f"Папка недоступна: {path}")
+                raise FileNotFoundError(tr('Папка недоступна: {path}', path=path))
             if hasattr(os, "startfile"):
                 os.startfile(path)
             else:
                 webbrowser.open(Path(path).as_uri())
         except OSError as error:
-            modal_message("Не удалось открыть папку", str(error), parent=root)
+            modal_message(tr('Не удалось открыть папку'), str(error), parent=root)
 
     table = ResultsTable(panel, on_sync=request_sync, on_refresh=request_refresh, on_delete=request_delete,
                          on_fix_origin=request_fix_origin, on_open_folder=open_local_folder)
@@ -859,12 +903,12 @@ def run():
 
     table_notes = ctk.CTkFrame(panel, fg_color="transparent")
     table_notes.grid(row=5, column=0, columnspan=3, sticky="ew", padx=16, pady=(5, 5))
-    cache_notice = label_widget(table_notes, text="Данные из кэша", muted=True)
+    cache_notice = label_widget(table_notes, text=tr('Данные из кэша'), muted=True)
     cache_notice.configure(text_color="#ff999f")
     cache_notice.grid(row=0, column=1, sticky="w", padx=(12, 0))
     cache_notice.grid_remove()
     problem_filter = ctk.CTkCheckBox(
-        table_notes, text="Требуют внимания", variable=only_problems, font=FONT, text_color=TEXT,
+        table_notes, text=tr('Требуют внимания'), variable=only_problems, font=FONT, text_color=TEXT,
         fg_color=ACCENT, hover_color="#895dff", border_color=BORDER, command=lambda: redraw_rows(),
     )
     problem_filter.grid(row=0, column=0, sticky="w")
@@ -904,10 +948,11 @@ def run():
         return profile_cache_path(preferences_path, name, path, login.get(), authenticated)
 
     def summary_text():
-        return "  ·  ".join(f"{label}: {counts[key]}" for key, (label, _, _) in STATUSES.items())
+        return "  ·  ".join(f"{tr(label)}: {counts[key]}" for key, (label, _, _) in STATUSES.items())
 
     def show_profile_cache():
-        nonlocal compared, active_cache
+        nonlocal compared, active_cache, from_cache
+        from_cache = False
         compared = None
         active_cache = None
         reset_results()
@@ -916,10 +961,11 @@ def run():
         rows = load_cache(path) if path is not None else None
         table.set_actions_enabled(True)
         if rows is None:
-            status.set("Нажмите «Сравнить», чтобы получить данные.")
+            status.set(tr('Нажмите «Сравнить», чтобы получить данные.'))
             return
         compared = (folder.get().strip(), login.get(), None)
         active_cache = path
+        from_cache = True
         for row in rows:
             add_result(row)
         cache_notice.grid()
@@ -931,7 +977,7 @@ def run():
         try:
             save_cache(active_cache, all_rows.values())
         except OSError:
-            return "  ·  Не удалось сохранить кэш."
+            return tr('  ·  Не удалось сохранить кэш.')
         return ""
 
     def load(path, account, token):
@@ -951,7 +997,7 @@ def run():
                 break
             if kind == "row":
                 add_result(value)
-                status.set(f"Обработано репозиториев: {sum(counts.values())}")
+                status.set(tr('Обработано репозиториев: {count}', count=sum(counts.values())))
                 continue
             loader.stop()
             loader_group.grid_remove()
@@ -974,50 +1020,65 @@ def run():
                         redraw_rows()
                 if error:
                     status.set(error)
-                    modal_message("Не удалось завершить действие", error, parent=root)
+                    modal_message(tr('Не удалось завершить действие'), error, parent=root)
                     return
             if kind == "error":
                 if active_cache is not None and active_cache.is_file():
                     show_profile_cache()
-                status.set(value)
+                status.set(error_text(value))
             else:
                 status.set(summary_text() + remember_table())
             return
         root.after(75, show_results)
 
     def submit():
-        nonlocal compared, active_cache
+        nonlocal compared, active_cache, from_cache
         if button.cget("state") == "disabled":
             return
         path, account = folder.get().strip(), login.get()
         if not path or not account:
-            status.set("Укажите папку и выберите сохранённого пользователя GitHub.")
+            status.set(tr('Укажите папку и выберите сохранённого пользователя GitHub.'))
             return
         try:
             token = current_token()
         except ValueError as error:
-            status.set(str(error))
+            status.set(error_text(str(error)))
             return
         set_busy(True)
         compared = (path, account, token)
         active_cache = selected_cache_path()
+        from_cache = False
         cache_notice.grid_remove()
         reset_results()
-        status.set("Сравниваем папки с репозиториями GitHub…")
-        show_loader("Сравнение")
+        status.set(tr('Сравниваем папки с репозиториями GitHub…'))
+        show_loader(tr('Сравнение'))
         Thread(target=load, args=(path, account, token), daemon=True).start()
         root.after(75, show_results)
 
-    button = button_widget(panel, text="Сравнить", primary=True, command=submit)
+    button = button_widget(panel, text=tr('Сравнить'), primary=True, command=submit)
     button.grid(row=4, column=2, sticky="ew", padx=(0, 16), pady=(8, 0))
     controls = (folder_input, login_input, profile_input, browse, add_button, save_button,
-                profiles_button, users_button, problem_filter, button)
-    if preferences["default_profile"]:
+                profiles_button, users_button, problem_filter, language_picker, button)
+    if snapshot is not None:
+        folder.set(snapshot["folder"])
+        login.set(snapshot["login"])
+        profile_name.set(snapshot["profile"])
+        only_problems.set(snapshot["only_problems"])
+        compared = snapshot["compared"]
+        active_cache = snapshot["cache"]
+        for row in snapshot["rows"]:
+            add_result(row)
+        from_cache = snapshot["cached"]
+        if from_cache:
+            cache_notice.grid()
+        if snapshot["rows"] or compared is not None:
+            status.set(summary_text())
+    elif preferences["default_profile"]:
         profile_name.set(preferences["default_profile"])
         apply_profile()
     root.bind("<Return>", lambda _event: submit())
     login_input.focus_set()
-    if root.tk.call("tk", "windowingsystem") == "win32":
+    if snapshot is None and root.tk.call("tk", "windowingsystem") == "win32":
         def maximize_on_map(event):
             if event.widget is root:
                 root.unbind("<Map>", startup_binding)
@@ -1026,3 +1087,6 @@ def run():
         # CustomTkinter restores the window while setting up the Windows title bar.
         startup_binding = root.bind("<Map>", maximize_on_map, add="+")
     root.mainloop()
+    if next_window is not None:
+        panel.destroy()
+    return next_window

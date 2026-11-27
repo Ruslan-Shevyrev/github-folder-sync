@@ -2,6 +2,8 @@ import tkinter as tk
 import webbrowser
 import customtkinter as ctk
 
+from localization import error_text, tr
+
 
 COLUMNS = (
     ("number", "\u2116", 45),
@@ -64,6 +66,11 @@ class ResultsTable(ctk.CTkFrame):
         self.resize_job = None
         self.clear()
         self.canvas.bind("<Configure>", self.schedule_resize)
+
+    def destroy(self):
+        if self.resize_job is not None:
+            self.after_cancel(self.resize_job)
+        super().destroy()
 
     def scroll(self, event):
         self.canvas.yview_scroll(-int(event.delta / 120), "units")
@@ -144,7 +151,7 @@ class ResultsTable(ctk.CTkFrame):
         self.canvas.create_rectangle(0, 0, self.width, self.bottom, fill="#222740", outline="")
         x = 0
         for _, title, width in self.columns:
-            self.text(x + 8, 7, title, "#f4f1ff", width - 16, bold=True)
+            self.text(x + 8, 7, tr(title), "#f4f1ff", width - 16, bold=True)
             x += width
         self.canvas.configure(scrollregion=(0, 0, self.width, self.bottom))
 
@@ -197,7 +204,7 @@ class ResultsTable(ctk.CTkFrame):
         backdrop = self.canvas.create_rectangle(0, top, self.width, top, fill=background, outline="")
         x = 0
         bottom = top + 34
-        values = {"number": str(number), "name": row.name, "status": label,
+        values = {"number": str(number), "name": row.name, "status": tr(label),
                   "visibility": row.visibility.capitalize() or "—",
                   "path": row.local_path, "github": row.github_url}
         sync_x = 0
@@ -207,10 +214,10 @@ class ResultsTable(ctk.CTkFrame):
                 sync_x = x + 7
             elif column == "refresh" and self.on_refresh is not None:
                 self.draw_button(x + 7, top + 6, "↻", 28, lambda: self.on_refresh(row),
-                                 hint="Обновить")
+                                 hint=tr("Обновить"))
             elif column == "delete" and row.local_path and self.on_delete is not None:
                 self.draw_button(x + 7, top + 6, None, 28, lambda: self.on_delete(row),
-                                 hint="Удалить", background="#813c51", active="#a24f67", icon=self.draw_trash_icon)
+                                 hint=tr("Удалить"), background="#813c51", active="#a24f67", icon=self.draw_trash_icon)
             elif column == "branches":
                 bottom = max(bottom, self.draw_branches(row, x + 8, top + 6, width - 16, sync_x) + 6)
             elif value:
@@ -327,16 +334,16 @@ class ResultsTable(ctk.CTkFrame):
         if not row.local_path:
             hint = "git clone"
         elif branch.status == "github":
-            hint = "git fetch — создать локальную ветку"
+            hint = tr("git fetch — создать локальную ветку")
         else:
             hint = "git pull"
         if branch is not None:
-            hint += f"\nВетка: {branch.name}"
+            hint += tr("\nВетка: {branch_name}", branch_name=branch.name)
         return self.draw_button(x, y, "↓", 28, lambda: self.on_sync(row, branch), hint=hint)
 
     def draw_branches(self, row, x, y, width, sync_x):
         if not row.local_path and row.github_url and not row.branches and not row.branch_error:
-            label = self.text(x, y, "Клонировать репозиторий", "#f4f1ff", width)
+            label = self.text(x, y, tr("Клонировать репозиторий"), "#f4f1ff", width)
             bottom = self.canvas.bbox(label)[3]
             if self.on_sync is not None:
                 button = self.draw_download(row, None, sync_x, y)
@@ -345,7 +352,7 @@ class ResultsTable(ctk.CTkFrame):
         if row.branch_error or not row.branches:
             can_fix = row.origin_mismatch and self.on_fix_origin is not None
             color = "#d4baff" if can_fix else BRANCH_COLORS["gray"]
-            item = self.text(x, y, row.branch_error or "—", color, width)
+            item = self.text(x, y, error_text(row.branch_error) or "—", color, width)
             if can_fix:
                 self.canvas.itemconfigure(item, disabledfill="#9297ac")
                 self.register_action(item)
@@ -358,7 +365,7 @@ class ResultsTable(ctk.CTkFrame):
             label = branch.name
             if branch.status in BRANCH_LABELS:
                 detail, color = BRANCH_LABELS[branch.status]
-                label = f"{label} · {detail}"
+                label = f"{label} · {tr(detail)}"
                 foreground = BRANCH_COLORS[color]
                 local = remote = color
             else:
@@ -368,10 +375,10 @@ class ResultsTable(ctk.CTkFrame):
 
             items = [self.text(x, y, label, foreground, name_width - 8)]
             if branch.local_commit:
-                items.append(self.draw_commit(x + name_width, y, "Локально", branch.local_commit,
+                items.append(self.draw_commit(x + name_width, y, tr("Локально"), branch.local_commit,
                                               local, side_width - 8))
             if not branch.local_commit:
-                items.append(self.text(x + name_width, y, "Локально —", BRANCH_COLORS["gray"]))
+                items.append(self.text(x + name_width, y, tr("Локально —"), BRANCH_COLORS["gray"]))
             if branch.status in {"behind", "ahead", "github", "local"}:
                 inbound = branch.status in {"behind", "github"}
                 items.append(self.text(x + name_width + side_width, y, "←" if inbound else "→",
