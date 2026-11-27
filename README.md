@@ -1,44 +1,66 @@
-# Папки и репозитории GitHub
+# GitHub Folder Sync
 
-Приложение сравнивает имена папок первого уровня с именами публичных репозиториев указанного аккаунта GitHub. Регистр букв при сравнении игнорируется.
+[Читать на русском](README.ru.md)
 
-1. Выберите локальную папку.
-2. Нажмите «Добавить пользователя», сохраните логин GitHub и выберите его в списке. Нажмите «Сравнить».
-3. Зелёные строки показывают совпадения, серые — репозитории только на GitHub, красные — папки без совпадения среди публичных репозиториев.
+A Windows desktop utility for comparing local project folders with GitHub repositories. See which repositories exist locally or on GitHub, compare branch commits, and pull or clone from the same table.
 
-Щелчок по ссылке открывает репозиторий в браузере, а по локальному пути — папку в Проводнике. Для сравнения нужен интернет. Вход в GitHub не требуется.
+## Download and run
 
-Колонка «Ветки» показывает ветки по одной на строку внутри ячейки репозитория. Зелёный текст означает совпадение коммитов. Красным отмечена отстающая сторона, жёлтым — опережающая или единственная. Серый текст означает расхождение или неполную историю с соответствующей подписью.
+When a release is available, download `GitHubFolderSync-<version>-windows-x64.zip` from [GitHub Releases](https://github.com/Ruslan-Shevyrev/github-folder-sync/releases). Extract the entire archive and open `GitHubFolderSync.exe`. The portable build runs without a separate Python installation. Install Git and make sure it is in `PATH` to check branches and run Git operations.
 
-Для проверки веток нужен Git в `PATH`. У совпавшей папки `origin` должен указывать на соответствующий репозиторий GitHub. При необходимости Git загружает недостающие объекты коммитов без изменения веток и рабочих файлов.
+## How to use
 
-Кнопка «↓» между обновлением строки и корзиной позволяет обновить текущую локальную ветку через `git pull --ff-only`, создать отсутствующую локальную ветку или клонировать отсутствующий репозиторий. Для обновления переключитесь на нужную ветку и сохраните рабочие изменения. Горизонтальные стрелки в колонке «Ветки» показывают направление синхронизации.
+1. Click **Add user**, enter your GitHub username, and select the saved user.
+2. Choose a **Local folder** with **Browse…**, or enter its path. The app matches the immediate subfolders to repository names without regard to case.
+3. Click **Compare**. The table shows each repository's location, GitHub visibility, and branch status. Select **Needs attention** to show only missing counterparts, branch differences, and errors.
+4. Click **Save as profile** to keep the folder and user together. Mark a profile as the default to load it at startup. Use **View users** and **View profiles** to manage saved entries.
 
-## Сохранённые настройки
+The top-right menus switch between Russian and English and between **Dark** and **Light**. The app remembers both choices. The first launch uses the dark theme.
 
-Кнопка «Сохранить как профиль» запоминает выбранную папку и пользователя под именем профиля. Выбор профиля заполняет оба поля. Если отметить «Настройки по умолчанию», этот профиль будет подставляться при запуске. Единственная отметка по умолчанию переносится на новый профиль, остальные остаются доступны.
+## Branches and row actions
 
-При первом сохранении создаётся `settings/settings.json` рядом с EXE или в папке проекта при запуске из исходников. Git игнорирует папку `settings/`. Чтобы перенести настройки в другую распакованную копию, скопируйте туда эту папку.
+- **Green** means the branch points to the same commit on both sides. **Red** marks the side that is behind. **Yellow** marks the side that is ahead or the only side with the branch. **Gray** marks diverged branches or an incomplete history.
+- **↻** refreshes one row. **↓** clones a missing repository, creates a missing local branch, or pulls into a local branch that is behind. Pull uses `git pull --ff-only` and requires the target branch to be checked out with a clean working tree. The arrows in the branch column indicate direction.
+- **Trash** deletes the local folder and its contents permanently after confirmation.
+- Click a local path to open it in File Explorer or a GitHub URL to open it in your browser. If Git reports that `origin` points to another repository, click the message to review the current URL and confirm the correction.
 
-Кнопка «Просмотр профилей» открывает таблицу сохранённых профилей. В ней можно изменить имя, пользователя, папку и отметку по умолчанию или удалить профиль. При создании профиля логин и путь отображаются для проверки и берутся из главного окна.
+## Private repositories
 
-В окне добавления или редактирования пользователя можно указать необязательный токен GitHub. Без токена доступны публичные репозитории. Для приватных репозиториев выберите доступ к нужным репозиториям и право `Contents: Read`. Можно ввести токен напрямую или указать `v{GITHUB_FOLDER_SYNC_TOKEN}`, чтобы брать его из переменной окружения Windows. Прямой токен хранится открытым текстом в локальном JSON. При использовании переменной в JSON сохраняется только ссылка на неё.
+Public repositories are available without a token. To access private repositories, add a fine-grained GitHub personal access token to the saved user. Give it access to the relevant repositories and **Contents: Read** for checking branches, cloning, and pulling.
 
-## Запуск
+Enter the token directly or use `v{GITHUB_FOLDER_SYNC_TOKEN}` to read it from a Windows environment variable. A directly entered token is stored as plain text in the local settings file. The variable option stores only the reference. Profiles that select the same user share that user's token.
 
-Запустите из папки проекта с помощью Python 3 с Tkinter.
+## Settings and cache
+
+The app stores settings in `settings/settings.json` and the last comparison for each profile in `cache/`, next to the EXE or in the project root when running from source. Git ignores both folders.
+
+Selecting a profile with a saved result opens its table immediately and shows **Cached results** above it. Click **Compare** for fresh results. The **Needs attention** filter works on the loaded table without contacting GitHub.
+
+## Run from source
+
+Run these commands from the project root in PowerShell with Python 3.13.
 
 ```powershell
-python -m pip install -r requirements.txt
-python github_folder_sync.py
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe github_folder_sync.py
 ```
 
-`github_folder_sync.py` запускает приложение. `gui.py` и `results_table.py` отвечают за интерфейс. `comparison.py` сравнивает папки с репозиториями, а `branches.py` проверяет ветки.
+The interface uses CustomTkinter. The app calls the system Git for branch comparisons and repository operations.
 
-## Сборка для Windows x64
+## Build for Windows x64
+
+The build requires 64-bit Python. The script installs dependencies in `.venv` and packages the app with PyInstaller.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\build.ps1 -Zip
+powershell -ExecutionPolicy Bypass -File .\build.ps1
+.\dist\GitHubFolderSync\GitHubFolderSync.exe
 ```
 
-Скрипт создаёт окружение и устанавливает PyInstaller. Готовый файл находится в `dist\GitHubFolderSync\GitHubFolderSync.exe`. Для переноса приложения скопируйте всю папку `GitHubFolderSync` или используйте готовый ZIP из `dist`. Параметр `-Zip` можно опустить.
+To build a ZIP for distribution, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build.ps1 -Zip -Version v1.0.0
+```
+
+This creates `distGitHubFolderSync-v1.0.0-windows-x64.zip`. Pushing a new tag that starts with `v`, such as `v1.0.0`, triggers the [release workflow](.github/workflows/release.yml), which builds the ZIP and attaches it to a GitHub release.
