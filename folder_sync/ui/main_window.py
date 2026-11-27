@@ -40,6 +40,10 @@ def status_style(key):
 
 
 class MainWindow(ctk.CTk):
+    def _windows_set_titlebar_icon(self):
+        # Keep the application icon set by iconphoto in run().
+        pass
+
     def _windows_set_titlebar_color(self, color_mode):
         # CustomTkinter 5.2.2 normally withdraws the window to repaint its frame.
         set_windows_titlebar_theme(self, color_mode.lower() == "dark")
@@ -61,6 +65,8 @@ def run():
     set_theme(theme)
     ctk.set_appearance_mode(theme)
     root = MainWindow(fg_color=theme_color("background"))
+    icon_path = Path(__file__).resolve().parents[2] / "assets" / "sync-icon.png"
+    root.iconphoto(True, tk.PhotoImage(master=root, file=str(icon_path)))
     root.geometry("1080x560")
     root.minsize(760, 360)
     snapshot = None

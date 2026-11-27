@@ -276,16 +276,16 @@ class ResultsTable(ctk.CTkFrame):
             self.canvas.configure(cursor="")
 
     def draw_trash_icon(self, x, y, tag):
-        self.canvas.create_line(x - 7, y - 4, x + 7, y - 4, fill="#ffffff", disabledfill=theme_color("disabled_icon"), tags=tag)
+        self.canvas.create_line(x - 7, y - 4, x + 7, y - 4, fill=theme_color("delete_icon"), disabledfill=theme_color("disabled_icon"), tags=tag)
         self.canvas.create_line(x - 3, y - 4, x - 3, y - 7, x + 3, y - 7, x + 3, y - 4,
-                                fill="#ffffff", disabledfill=theme_color("disabled_icon"), tags=tag)
+                                fill=theme_color("delete_icon"), disabledfill=theme_color("disabled_icon"), tags=tag)
         self.canvas.create_line(x - 5, y - 2, x - 4, y + 7, x + 4, y + 7, x + 5, y - 2,
-                                fill="#ffffff", disabledfill=theme_color("disabled_icon"), tags=tag)
+                                fill=theme_color("delete_icon"), disabledfill=theme_color("disabled_icon"), tags=tag)
 
     def draw_button(self, x, y, label, width, command, *, hint, background=None,
                     active=None, icon=None):
-        background = background or theme_color("accent")
-        active = active or theme_color("accent_hover")
+        background = background or theme_color("row_action")
+        active = active or theme_color("row_action_hover")
         radius = 5
         right, bottom = x + width, y + 23
         button = self.canvas.create_polygon(
@@ -297,7 +297,7 @@ class ResultsTable(ctk.CTkFrame):
         self.canvas.addtag_withtag(tag, button)
         center_x, center_y = x + width / 2, y + 11
         if icon is None:
-            self.canvas.create_text(center_x, center_y, text=label, fill="#ffffff", disabledfill=theme_color("disabled_icon"),
+            self.canvas.create_text(center_x, center_y, text=label, fill=theme_color("row_action_icon"), disabledfill=theme_color("disabled_icon"),
                                     font=("Segoe UI", 10, "bold"), tags=tag)
         else:
             icon(center_x, center_y, tag)

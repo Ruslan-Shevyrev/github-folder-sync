@@ -1,4 +1,5 @@
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
 
 import customtkinter as ctk
@@ -72,8 +73,16 @@ def edit_shortcut_on_windows(event):
         return "break"
 
 
+class DialogWindow(ctk.CTkToplevel):
+    def iconbitmap(self, bitmap=None, default=None):
+        # CustomTkinter schedules this icon even when a default is inherited from the root.
+        if bitmap and Path(bitmap).name == "CustomTkinter_icon_Windows.ico":
+            return
+        return super().iconbitmap(bitmap, default)
+
+
 def create_dialog(parent, title, *, resizable=False):
-    dialog = ctk.CTkToplevel(parent, fg_color=theme_color("panel"))
+    dialog = DialogWindow(parent, fg_color=theme_color("panel"))
     dialog.withdraw()
     dialog.title(title)
     dialog.transient(parent)
