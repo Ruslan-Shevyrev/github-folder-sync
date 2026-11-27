@@ -22,16 +22,16 @@ from .dialogs import (
     FONT, button_widget, combo_widget, configure_theme, confirm_action, edit_shortcut_on_windows,
     entry_widget, label_widget, modal_message,
 )
-from .localization import LANGUAGES, error_text, set_language, tr
+from .localization import DEFAULT_LANGUAGE, LANGUAGES, error_text, set_language, tr
 from .profiles import add_profile, open_profiles
 from .results_table import ResultsTable
 from .users import add_user, open_users
 
 
 STATUSES = {
-    "both": "Есть в обоих местах",
-    "github": "Только на GitHub",
-    "local": "Только локально",
+    "both": "status.both",
+    "github": "status.github_only",
+    "local": "status.local_only",
 }
 
 
@@ -56,8 +56,8 @@ def run():
     theme = preferences.get("theme")
     if theme not in THEMES:
         theme = "Dark"
-    if language not in ("ru", "en"):
-        language = "ru"
+    if not isinstance(language, str) or language not in LANGUAGES:
+        language = DEFAULT_LANGUAGE
     set_theme(theme)
     ctk.set_appearance_mode(theme)
     root = MainWindow(fg_color=theme_color("background"))
@@ -77,17 +77,17 @@ def run():
 
 
 def run_window(root, language, theme, snapshot=None):
-    root.title(tr('Папки и репозитории GitHub'))
+    root.title(tr("window.title"))
     folder = tk.StringVar()
     login = tk.StringVar()
     profile_name = tk.StringVar()
-    status = tk.StringVar(value=tr('Выберите папку и сохранённого пользователя GitHub.'))
+    status = tk.StringVar(value=tr("compare.initial"))
     preferences_path = settings_path()
     try:
         preferences = load_settings(preferences_path)
     except (OSError, ValueError) as error:
         preferences = {"users": {}, "profiles": {}, "default_profile": None}
-        status.set(tr('Не удалось прочитать настройки: {error}', error=error_text(str(error))))
+        status.set(tr("error.read_settings", error=error_text(str(error))))
     results = Queue()
     counts = Counter()
     all_rows = {}
@@ -111,7 +111,7 @@ def run_window(root, language, theme, snapshot=None):
         except (OSError, ValueError) as error:
             language_display.set(LANGUAGES[language])
             theme_display.set(theme)
-            modal_message(tr("Не удалось сохранить"), str(error), parent=root)
+            modal_message(tr("error.save"), str(error), parent=root)
             return
         next_window = (new_language, new_theme, {
             "folder": folder.get(), "login": login.get(), "profile": profile_name.get(),
@@ -138,19 +138,19 @@ def run_window(root, language, theme, snapshot=None):
     theme_picker = combo_widget(appearance, variable=theme_display, values=list(THEMES), width=105,
                                 command=lambda chosen: switch_appearance("theme", chosen))
     theme_picker.pack(side="left", padx=(8, 0))
-    label_widget(panel, text=tr('Репозитории GitHub'), heading=True).grid(
+    label_widget(panel, text=tr("window.heading"), heading=True).grid(
         row=0, column=0, columnspan=3, sticky="w", padx=(16, 0), pady=(14, 12)
     )
-    label_widget(panel, text=tr('Пользователь GitHub')).grid(row=1, column=0, sticky="w", padx=(16, 4))
+    label_widget(panel, text=tr("user.github")).grid(row=1, column=0, sticky="w", padx=(16, 4))
     login_input = combo_widget(panel, variable=login, values=[])
     login_input.grid(row=1, column=1, sticky="ew", padx=8)
-    label_widget(panel, text=tr('Локальная папка')).grid(row=2, column=0, sticky="w", padx=(16, 4))
+    label_widget(panel, text=tr("folder.local")).grid(row=2, column=0, sticky="w", padx=(16, 4))
     folder_input = entry_widget(panel, textvariable=folder)
     folder_input.grid(row=2, column=1, sticky="ew", padx=8, pady=8)
     if root.tk.call("tk", "windowingsystem") == "win32":
         folder_input.bind("<Control-KeyPress>", edit_shortcut_on_windows)
 
-    label_widget(panel, text=tr('Профиль')).grid(row=3, column=0, sticky="w", padx=(16, 4))
+    label_widget(panel, text=tr("profile.label")).grid(row=3, column=0, sticky="w", padx=(16, 4))
     profile_input = combo_widget(panel, variable=profile_name, values=[])
     profile_input.grid(row=3, column=1, sticky="ew", padx=8)
 
@@ -171,7 +171,7 @@ def run_window(root, language, theme, snapshot=None):
         if original is None and name is not None:
             login.set(name)
             profile_name.set("")
-            status.set(tr("Пользователь выбран."))
+            status.set(tr("user.selected"))
         elif original is not None and name is None:
             if login.get() == original:
                 login.set("")
@@ -180,13 +180,13 @@ def run_window(root, language, theme, snapshot=None):
             elif profile_name.get() and profile_name.get() not in data["profiles"]:
                 profile_name.set("")
                 show_profile_cache()
-            status.set(tr("Пользователь «{name}» и его профили удалены.", name=original))
+            status.set(tr("user.deleted", name=original))
         elif original is not None:
             if login.get() == original and name != original:
                 login.set(name)
                 if profile_name.get():
                     show_profile_cache()
-            status.set(tr("Логин «{name}» сохранён.", name=name))
+            status.set(tr("user.saved", name=name))
         refresh_choices()
 
     def profiles_changed(data, original=None, name=None):
@@ -197,26 +197,26 @@ def run_window(root, language, theme, snapshot=None):
             if original is None or profile_name.get() == original:
                 profile_name.set(name)
                 apply_profile()
-            status.set(tr("Профиль «{name}» сохранён.", name=name))
+            status.set(tr("profile.saved", name=name))
         elif original is not None:
             if profile_name.get() == original:
                 profile_name.set("")
                 show_profile_cache()
-            status.set(tr("Профиль «{name}» удалён.", name=original))
+            status.set(tr("profile.deleted", name=original))
 
-    add_button = button_widget(panel, text=tr('Добавить пользователя'), command=lambda: add_user(root, preferences_path, users_changed))
+    add_button = button_widget(panel, text=tr("user.add"), command=lambda: add_user(root, preferences_path, users_changed))
     add_button.grid(row=1, column=2, sticky="ew", padx=(0, 16))
-    save_button = button_widget(panel, text=tr('Сохранить как профиль'), command=lambda: add_profile(
+    save_button = button_widget(panel, text=tr("button.save_profile"), command=lambda: add_profile(
         root, preferences_path, folder.get().strip(), login.get(), profiles_changed
     ))
     save_button.grid(row=3, column=2, sticky="ew", padx=(0, 16))
     navigation = ctk.CTkFrame(panel, fg_color="transparent")
     navigation.grid(row=4, column=1, sticky="e", padx=8, pady=(8, 0))
-    users_button = button_widget(navigation, text=tr('Просмотр пользователей'), command=lambda: open_users(
+    users_button = button_widget(navigation, text=tr("user.view"), command=lambda: open_users(
         root, preferences_path, login.get(), users_changed
     ))
     users_button.pack(side="left", padx=(0, 6))
-    profiles_button = button_widget(navigation, text=tr('Просмотр профилей'), command=lambda: open_profiles(
+    profiles_button = button_widget(navigation, text=tr("profile.view"), command=lambda: open_profiles(
         root, preferences_path, profile_name.get(), profiles_changed
     ))
     profiles_button.pack(side="left")
@@ -224,11 +224,11 @@ def run_window(root, language, theme, snapshot=None):
     refresh_choices()
 
     def choose_folder():
-        selected = filedialog.askdirectory(parent=root, title=tr('Выберите папку'), mustexist=True)
+        selected = filedialog.askdirectory(parent=root, title=tr("folder.choose"), mustexist=True)
         if selected:
             folder.set(selected)
 
-    browse = button_widget(panel, text=tr('Обзор…'), command=choose_folder)
+    browse = button_widget(panel, text=tr("button.browse"), command=choose_folder)
     browse.grid(row=2, column=2, sticky="ew", padx=(0, 16))
 
     def current_token():
@@ -245,7 +245,7 @@ def run_window(root, language, theme, snapshot=None):
             return False
         selection = (folder.get().strip(), login.get())
         if compared is None or compared[:2] != selection or compared[2] not in (None, token):
-            modal_message(tr('Сравнение устарело'), tr('Сначала повторите сравнение для выбранных настроек.'),
+            modal_message(tr("compare.outdated"), tr("compare.repeat_required"),
                                 parent=root)
             return False
         compared = (*selection, token)
@@ -295,7 +295,7 @@ def run_window(root, language, theme, snapshot=None):
 
     def request_refresh(row):
         if can_update_row():
-            run_row_action(row, tr('Обновление строки'))
+            run_row_action(row, tr("progress.row_refresh"))
 
     def request_delete(row):
         if not can_update_row() or not row.local_path:
@@ -304,10 +304,10 @@ def run_window(root, language, theme, snapshot=None):
         base_path = compared[0]
         set_busy(True)
         confirm_action(
-            root, tr('Удаление локальной папки'),
-            tr('Папка, все её файлы и локальные коммиты будут удалены безвозвратно.\n\n{path}', path=path),
-            tr('Удалить'),
-            lambda: run_row_action(row, tr('Удаление'), lambda: delete_local_folder(base_path, path)),
+            root, tr("folder.delete_title"),
+            tr("folder.delete_confirm", path=path),
+            tr("button.delete"),
+            lambda: run_row_action(row, tr("progress.delete"), lambda: delete_local_folder(base_path, path)),
             destructive=True, on_cancel=lambda: set_busy(False),
         )
 
@@ -316,17 +316,17 @@ def run_window(root, language, theme, snapshot=None):
             return
         if row.local_path:
             destination = Path(row.local_path)
-            action = tr('Создать локальную ветку') if branch.status == "github" else tr('Обновить через git pull')
+            action = tr("branch.create_local") if branch.status == "github" else tr("branch.pull_title")
             operation = sync_from_github
-            progress_text = tr('Создание ветки') if branch.status == "github" else tr('Мерж (git pull)')
-            button_text = tr('Создать ветку') if branch.status == "github" else tr('Обновить')
+            progress_text = tr("progress.create_branch") if branch.status == "github" else tr("progress.pull")
+            button_text = tr("branch.create") if branch.status == "github" else tr("button.refresh")
         else:
             destination = Path(compared[0]).expanduser().absolute() / row.name
-            action = tr('Клонировать репозиторий')
+            action = tr("repo.clone_title")
             operation = clone_from_github
-            progress_text = tr('Клонирование')
-            button_text = tr('Клонировать')
-        branch_line = tr('\nВетка: {branch_name}', branch_name=branch.name) if branch else ""
+            progress_text = tr("progress.clone")
+            button_text = tr("repo.clone")
+        branch_line = tr("branch.line", branch_name=branch.name) if branch else ""
         set_busy(True)
         confirm_action(
             root, action, f"{row.name}{branch_line}\n\n{destination}", button_text,
@@ -345,29 +345,29 @@ def run_window(root, language, theme, snapshot=None):
                 return
             target = corrected_origin(row.github_url, current)
         except (BranchError, OSError) as error:
-            modal_message(tr('Не удалось определить адрес'), str(error), parent=root)
+            modal_message(tr("error.origin_address"), str(error), parent=root)
             return
         display_origin = re.sub(r"(?<=://)[^/\s@]+@", "***@", current)
         command = f'git remote set-url origin "{target}"'
         set_busy(True)
         confirm_action(
-            root, tr('Исправление origin'),
-            tr('Текущий origin:\n{display_origin}\n\nКоманда:\n{command}', display_origin=display_origin, command=command),
-            tr('ОК'),
-            lambda: run_row_action(row, tr('Исправление origin'), lambda: change_origin(path, current, target)),
+            root, tr("origin.fix"),
+            tr("origin.command", display_origin=display_origin, command=command),
+            tr("button.ok"),
+            lambda: run_row_action(row, tr("origin.fix"), lambda: change_origin(path, current, target)),
             on_cancel=lambda: set_busy(False),
         )
 
     def open_local_folder(path):
         try:
             if not Path(path).is_dir():
-                raise FileNotFoundError(tr('Папка недоступна: {path}', path=path))
+                raise FileNotFoundError(tr("error.folder_unavailable", path=path))
             if hasattr(os, "startfile"):
                 os.startfile(path)
             else:
                 webbrowser.open(Path(path).as_uri())
         except OSError as error:
-            modal_message(tr('Не удалось открыть папку'), str(error), parent=root)
+            modal_message(tr("error.open_folder"), str(error), parent=root)
 
     table = ResultsTable(panel, on_sync=request_sync, on_refresh=request_refresh, on_delete=request_delete,
                          on_fix_origin=request_fix_origin, on_open_folder=open_local_folder)
@@ -388,12 +388,12 @@ def run_window(root, language, theme, snapshot=None):
 
     table_notes = ctk.CTkFrame(panel, fg_color="transparent")
     table_notes.grid(row=5, column=0, columnspan=3, sticky="ew", padx=16, pady=(5, 5))
-    cache_notice = label_widget(table_notes, text=tr('Данные из кэша'), muted=True)
+    cache_notice = label_widget(table_notes, text=tr("cache.notice"), muted=True)
     cache_notice.configure(text_color=theme_color("branch_red"))
     cache_notice.grid(row=0, column=1, sticky="w", padx=(12, 0))
     cache_notice.grid_remove()
     problem_filter = ctk.CTkCheckBox(
-        table_notes, text=tr('Требуют внимания'), variable=only_problems, font=FONT, text_color=theme_color("text"),
+        table_notes, text=tr("filter.attention"), variable=only_problems, font=FONT, text_color=theme_color("text"),
         fg_color=theme_color("accent"), hover_color=theme_color("accent_hover"), checkmark_color=WHITE, border_color=theme_color("border"), command=lambda: redraw_rows(),
     )
     problem_filter.grid(row=0, column=0, sticky="w")
@@ -445,7 +445,7 @@ def run_window(root, language, theme, snapshot=None):
         rows = load_cache(path) if path is not None else None
         table.set_actions_enabled(True)
         if rows is None:
-            status.set(tr('Нажмите «Сравнить», чтобы получить данные.'))
+            status.set(tr("compare.load_prompt"))
             return
         compared = (folder.get().strip(), login.get(), None)
         active_cache = path
@@ -461,7 +461,7 @@ def run_window(root, language, theme, snapshot=None):
         try:
             save_cache(active_cache, all_rows.values())
         except OSError:
-            return tr('  ·  Не удалось сохранить кэш.')
+            return tr("cache.save_error")
         return ""
 
     def load(path, account, token):
@@ -481,7 +481,7 @@ def run_window(root, language, theme, snapshot=None):
                 break
             if kind == "row":
                 add_result(value)
-                status.set(tr('Обработано репозиториев: {count}', count=sum(counts.values())))
+                status.set(tr("progress.checked", count=sum(counts.values())))
                 continue
             loader.stop()
             loader_group.grid_remove()
@@ -504,7 +504,7 @@ def run_window(root, language, theme, snapshot=None):
                         redraw_rows()
                 if error:
                     status.set(error)
-                    modal_message(tr('Не удалось завершить действие'), error, parent=root)
+                    modal_message(tr("error.action_failed"), error, parent=root)
                     return
             if kind == "error":
                 if active_cache is not None and active_cache.is_file():
@@ -521,7 +521,7 @@ def run_window(root, language, theme, snapshot=None):
             return
         path, account = folder.get().strip(), login.get()
         if not path or not account:
-            status.set(tr('Укажите папку и выберите сохранённого пользователя GitHub.'))
+            status.set(tr("error.folder_and_saved_user_required"))
             return
         try:
             token = current_token()
@@ -534,12 +534,12 @@ def run_window(root, language, theme, snapshot=None):
         from_cache = False
         cache_notice.grid_remove()
         reset_results()
-        status.set(tr('Сравниваем папки с репозиториями GitHub…'))
-        show_loader(tr('Сравнение'))
+        status.set(tr("progress.comparing"))
+        show_loader(tr("progress.compare"))
         Thread(target=load, args=(path, account, token), daemon=True).start()
         root.after(75, show_results)
 
-    button = button_widget(panel, text=tr('Сравнить'), primary=True, command=submit)
+    button = button_widget(panel, text=tr("button.compare"), primary=True, command=submit)
     button.grid(row=4, column=2, sticky="ew", padx=(0, 16), pady=(8, 0))
     controls = (folder_input, login_input, profile_input, browse, add_button, save_button,
                 profiles_button, users_button, problem_filter, language_picker, theme_picker, button)

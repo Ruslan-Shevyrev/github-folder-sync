@@ -11,23 +11,23 @@ COLUMNS = (
     ("refresh", "", 42),
     ("sync", "", 42),
     ("delete", "", 42),
-    ("name", "Название", 190),
-    ("status", "Статус", 160),
-    ("visibility", "Видимость", 108),
-    ("branches", "Ветки", 560),
-    ("path", "Локальный путь", 265),
-    ("github", "Ссылка на GitHub", 290),
+    ("name", "column.name", 190),
+    ("status", "column.status", 160),
+    ("visibility", "column.visibility", 108),
+    ("branches", "column.branches", 560),
+    ("path", "column.local_path", 265),
+    ("github", "column.github_url", 290),
 )
 
 FLEXIBLE_COLUMNS = {"name", "status", "branches", "path", "github"}
 
 
 BRANCH_LABELS = {
-    "equal": ("совпадает", "green"),
-    "local": ("только локально", "yellow"),
-    "github": ("только на GitHub", "yellow"),
-    "diverged": ("ветки разошлись", "gray"),
-    "unknown": ("неполная история", "gray"),
+    "equal": ("branch.equal", "green"),
+    "local": ("branch.local_only", "yellow"),
+    "github": ("branch.github_only", "yellow"),
+    "diverged": ("branch.diverged", "gray"),
+    "unknown": ("branch.incomplete", "gray"),
 }
 
 
@@ -208,10 +208,10 @@ class ResultsTable(ctk.CTkFrame):
                 sync_x = x + 7
             elif column == "refresh" and self.on_refresh is not None:
                 self.draw_button(x + 7, top + 6, "↻", 28, lambda: self.on_refresh(row),
-                                 hint=tr("Обновить"))
+                                 hint=tr("button.refresh"))
             elif column == "delete" and row.local_path and self.on_delete is not None:
                 self.draw_button(x + 7, top + 6, None, 28, lambda: self.on_delete(row),
-                                 hint=tr("Удалить"), background=theme_color("delete"), active=theme_color("delete_hover"), icon=self.draw_trash_icon)
+                                 hint=tr("button.delete"), background=theme_color("delete"), active=theme_color("delete_hover"), icon=self.draw_trash_icon)
             elif column == "branches":
                 bottom = max(bottom, self.draw_branches(row, x + 8, top + 6, width - 16, sync_x) + 6)
             elif value:
@@ -331,16 +331,16 @@ class ResultsTable(ctk.CTkFrame):
         if not row.local_path:
             hint = "git clone"
         elif branch.status == "github":
-            hint = tr("git fetch — создать локальную ветку")
+            hint = tr("branch.fetch_hint")
         else:
             hint = "git pull"
         if branch is not None:
-            hint += tr("\nВетка: {branch_name}", branch_name=branch.name)
+            hint += tr("branch.line", branch_name=branch.name)
         return self.draw_button(x, y, "↓", 28, lambda: self.on_sync(row, branch), hint=hint)
 
     def draw_branches(self, row, x, y, width, sync_x):
         if not row.local_path and row.github_url and not row.branches and not row.branch_error:
-            label = self.text(x, y, tr("Клонировать репозиторий"), theme_color("text"), width)
+            label = self.text(x, y, tr("repo.clone_title"), theme_color("text"), width)
             bottom = self.canvas.bbox(label)[3]
             if self.on_sync is not None:
                 button = self.draw_download(row, None, sync_x, y)
@@ -372,10 +372,10 @@ class ResultsTable(ctk.CTkFrame):
 
             items = [self.text(x, y, label, foreground, name_width - 8)]
             if branch.local_commit:
-                items.append(self.draw_commit(x + name_width, y, tr("Локально"), branch.local_commit,
+                items.append(self.draw_commit(x + name_width, y, tr("branch.local_commit"), branch.local_commit,
                                               local, side_width - 8))
             if not branch.local_commit:
-                items.append(self.text(x + name_width, y, tr("Локально —"), theme_color("branch_gray")))
+                items.append(self.text(x + name_width, y, tr("branch.no_local_commit"), theme_color("branch_gray")))
             if branch.status in {"behind", "ahead", "github", "local"}:
                 inbound = branch.status in {"behind", "github"}
                 items.append(self.text(x + name_width + side_width, y, "←" if inbound else "→",

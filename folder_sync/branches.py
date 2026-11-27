@@ -57,7 +57,6 @@ def github_git(path, *args, token="", **options):
                for arg in args):
         raise BranchError("Токен можно передать только GitHub по HTTPS.")
 
-    # Git reads HTTP credentials from the child environment instead of the command line.
     basic = b64encode(f"x-access-token:{token}".encode("ascii")).decode("ascii")
     count = int(os.environ.get("GIT_CONFIG_COUNT") or "0")
     config = {}

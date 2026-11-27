@@ -114,7 +114,7 @@ def confirm_action(parent, title, details, button_text, on_confirm, *, destructi
                  justify="left", anchor="w", wraplength=460).grid(row=1, column=0, sticky="ew")
     actions = ctk.CTkFrame(frame, fg_color="transparent")
     actions.grid(row=2, column=0, sticky="e", pady=(16, 0))
-    cancel = button_widget(actions, text=tr('Отмена'))
+    cancel = button_widget(actions, text=tr("button.cancel"))
     cancel.pack(side="left", padx=(0, 6))
     confirm = button_widget(actions, text=button_text, primary=True)
     if destructive:
@@ -148,7 +148,7 @@ def modal_message(title, details, *, parent, question=False, warning=False, head
             nonlocal answer
             answer = True
 
-        dialog = confirm_action(parent, title, details, tr('Подтвердить'), accept, destructive=warning)
+        dialog = confirm_action(parent, title, details, tr("button.confirm"), accept, destructive=warning)
     else:
         dialog, frame = create_dialog(parent, title)
         label_widget(frame, text=title, heading=heading).pack(anchor="w", pady=(0, 10))
@@ -175,9 +175,9 @@ def dialog_entry(frame, value="", *, readonly=False):
 def dialog_actions(dialog, frame, row, focus, save):
     actions = ctk.CTkFrame(frame, fg_color="transparent")
     actions.grid(row=row, column=0, columnspan=3, sticky="e")
-    cancel = button_widget(actions, text=tr('Отмена'))
+    cancel = button_widget(actions, text=tr("button.cancel"))
     cancel.pack(side="left", padx=(0, 6))
-    save_button = button_widget(actions, text=tr('Сохранить'), primary=True)
+    save_button = button_widget(actions, text=tr("button.save"), primary=True)
     save_button.pack(side="left")
     close = show_dialog(dialog, focus)
     cancel.configure(command=close)
@@ -187,7 +187,7 @@ def dialog_actions(dialog, frame, row, focus, save):
             if save():
                 close()
         except (OSError, ValueError, RuntimeError) as error:
-            modal_message(tr('Не удалось сохранить'), str(error), parent=dialog)
+            modal_message(tr("error.save"), str(error), parent=dialog)
         return "break"
 
     save_button.configure(command=submit)

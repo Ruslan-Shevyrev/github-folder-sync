@@ -6,7 +6,7 @@ A Windows desktop utility for comparing local project folders with GitHub reposi
 
 ## Download and run
 
-When a release is available, download `GitHubFolderSync-<version>-windows-x64.zip` from [GitHub Releases](https://github.com/Ruslan-Shevyrev/github-folder-sync/releases). Extract the entire archive and open `GitHubFolderSync.exe`. The portable build runs without a separate Python installation. Install Git and make sure it is in `PATH` to check branches and run Git operations.
+When a release is available, download `GitHubFolderSync-{VERSION}-windows-x64.zip` from [GitHub Releases](https://github.com/Ruslan-Shevyrev/github-folder-sync/releases). Extract the entire archive and open `GitHubFolderSync.exe`. The portable build runs without a separate Python installation. Install Git and make sure it is in `PATH` to check branches and run Git operations.
 
 ## How to use
 
@@ -28,7 +28,7 @@ The top-right menus switch between Russian and English and between **Dark** and 
 
 Public repositories are available without a token. To access private repositories, add a fine-grained GitHub personal access token to the saved user. Give it access to the relevant repositories and **Contents: Read** for checking branches, cloning, and pulling.
 
-Enter the token directly or use `v{GITHUB_FOLDER_SYNC_TOKEN}` to read it from a Windows environment variable. A directly entered token is stored as plain text in the local settings file. The variable option stores only the reference. Profiles that select the same user share that user's token.
+Enter the token directly or use `v{VARIABLE_NAME}` to read it from a Windows environment variable. A directly entered token is stored as plain text in the local settings file. The variable option stores only the reference. Profiles that select the same user share that user's token.
 
 ## Settings and cache
 
@@ -60,7 +60,14 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 To build a ZIP for distribution, run:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\build.ps1 -Zip -Version v1.0.0
+powershell -ExecutionPolicy Bypass -File .\build.ps1 -Zip -Version v{VERSION}
 ```
 
-This creates `distGitHubFolderSync-v1.0.0-windows-x64.zip`. Pushing a new tag that starts with `v`, such as `v1.0.0`, triggers the [release workflow](.github/workflows/release.yml), which builds the ZIP and attaches it to a GitHub release.
+This creates `distGitHubFolderSync-v{VERSION}-windows-x64.zip`.
+
+<table>
+	<tr>
+		<td valign="center" width="49%"><img src="https://github.com/Ruslan-Shevyrev/Ruslan-Shevyrev/blob/main/logoRS/logo_mini.gif" title="logo"></td>
+		<td valign="center" width="49%"><img src="https://github.com/Ruslan-Shevyrev/Ruslan-Shevyrev/blob/main/logoRS/logoRS_FULL.png" title="RuslanShevyrev"></td>
+	</tr>
+</table>

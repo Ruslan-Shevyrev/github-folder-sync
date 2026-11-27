@@ -6,7 +6,7 @@
 
 ## Скачать и запустить
 
-Если опубликован релиз, скачайте архив `GitHubFolderSync-<версия>-windows-x64.zip` со страницы [GitHub Releases](https://github.com/Ruslan-Shevyrev/github-folder-sync/releases). Распакуйте архив целиком и откройте `GitHubFolderSync.exe`. Для запуска готовой версии отдельно устанавливать Python не нужно. Для проверки веток и операций с репозиториями нужен Git в `PATH`.
+Если опубликован релиз, скачайте архив `GitHubFolderSync-{VERSION}-windows-x64.zip` со страницы [GitHub Releases](https://github.com/Ruslan-Shevyrev/github-folder-sync/releases). Распакуйте архив целиком и откройте `GitHubFolderSync.exe`. Для запуска готовой версии отдельно устанавливать Python не нужно. Для проверки веток и операций с репозиториями нужен Git в `PATH`.
 
 ## Как пользоваться
 
@@ -28,7 +28,7 @@
 
 Публичные репозитории доступны без токена. Для доступа к приватным добавьте fine-grained Personal Access Token к сохранённому пользователю. Выберите нужные репозитории и задайте право **Contents: Read** для проверки веток, клонирования и обновления.
 
-Можно ввести токен напрямую или указать `v{GITHUB_FOLDER_SYNC_TOKEN}`, чтобы прочитать его из переменной окружения Windows. Токен, введённый напрямую, сохраняется открытым текстом в локальном файле настроек. При использовании переменной сохраняется только ссылка на неё. Все профили одного пользователя используют его токен.
+Можно ввести токен напрямую или указать `v{VARIABLE_NAME}`, чтобы прочитать его из переменной окружения Windows. Токен, введённый напрямую, сохраняется открытым текстом в локальном файле настроек. При использовании переменной сохраняется только ссылка на неё. Все профили одного пользователя используют его токен.
 
 ## Настройки и кэш
 
@@ -60,7 +60,14 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 Чтобы создать ZIP для распространения, выполните команду:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\build.ps1 -Zip -Version v1.0.0
+powershell -ExecutionPolicy Bypass -File .\build.ps1 -Zip -Version v{VERSION}
 ```
 
-Архив появится по пути `distGitHubFolderSync-v1.0.0-windows-x64.zip`. При отправке на GitHub нового тега, начинающегося с `v`, например `v1.0.0`, [workflow релиза](.github/workflows/release.yml) собирает ZIP и прикрепляет его к релизу.
+Архив появится по пути `distGitHubFolderSync-v{VERSION}-windows-x64.zip`.
+
+<table>
+	<tr>
+		<td valign="center" width="49%"><img src="https://github.com/Ruslan-Shevyrev/Ruslan-Shevyrev/blob/main/logoRS/logo_mini.gif" title="logo"></td>
+		<td valign="center" width="49%"><img src="https://github.com/Ruslan-Shevyrev/Ruslan-Shevyrev/blob/main/logoRS/logoRS_FULL.png" title="RuslanShevyrev"></td>
+	</tr>
+</table>

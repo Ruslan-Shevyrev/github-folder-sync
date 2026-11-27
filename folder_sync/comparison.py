@@ -124,16 +124,16 @@ def delete_local_folder(parent, path):
         raise ValueError("Выбранный путь не является обычной локальной папкой.")
 
     def retry_readonly(operation, filename, error):
-        if not isinstance(error[1], PermissionError):
-            raise error[1]
+        if not isinstance(error, PermissionError):
+            raise error
         info = os.lstat(filename)
         if (stat.S_ISLNK(info.st_mode)
                 or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT):
-            raise error[1]
+            raise error
         os.chmod(filename, info.st_mode | stat.S_IWRITE)
         operation(filename)
 
-    shutil.rmtree(target, onerror=retry_readonly)
+    shutil.rmtree(target, onexc=retry_readonly)
 
 
 def compare(folder, login, token=""):

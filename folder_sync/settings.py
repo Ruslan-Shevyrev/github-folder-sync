@@ -16,7 +16,7 @@ def settings_path():
 
 def validate_token_reference(value):
     if value and not re.fullmatch(r"(?:v\{[^{}=\r\n]+\}|[A-Za-z0-9_-]+)", value):
-        raise ValueError("Введите токен GitHub или ссылку вида v{ИМЯ_ПЕРЕМЕННОЙ}.")
+        raise ValueError("Введите токен GitHub или ссылку вида v{VARIABLE_NAME}.")
 
 
 def resolve_token(value):

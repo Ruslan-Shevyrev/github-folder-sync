@@ -14,10 +14,10 @@ from .localization import tr
 
 
 TOKEN_HELP_LINES = (
-    "Необходимо для приватных токенов",
-    "Fine-grained personal access tokens",
-    "Read access to code and metadata",
-    "Токен или v{ИМЯ_ПЕРЕМЕННОЙ}",
+    "token.help_required",
+    "token.help_title",
+    "token.help_access",
+    "token.variable_hint",
 )
 
 
@@ -60,14 +60,14 @@ def token_help(parent, container):
 
 
 def user_dialog(parent, on_save, *, login="", token=""):
-    title = tr('Редактирование пользователя') if login else tr('Добавить пользователя')
+    title = tr("user.edit") if login else tr("user.add")
     dialog, frame = create_dialog(parent, title)
-    label_widget(frame, text=tr('Логин GitHub')).grid(row=0, column=0, sticky="w")
+    label_widget(frame, text=tr("user.username")).grid(row=0, column=0, sticky="w")
     entry = dialog_entry(frame, login)
     entry.grid(row=1, column=0, sticky="ew", pady=(6, 10))
     token_heading = ctk.CTkFrame(frame, fg_color="transparent")
     token_heading.grid(row=2, column=0, sticky="w")
-    label_widget(token_heading, text=tr('Токен GitHub (необязательно)')).pack(side="left")
+    label_widget(token_heading, text=tr("token.optional")).pack(side="left")
     token_help(dialog, token_heading)
     token_row = ctk.CTkFrame(frame, fg_color="transparent")
     token_row.grid(row=3, column=0, sticky="ew", pady=(6, 12))
@@ -116,14 +116,14 @@ def open_users(root, preferences_path, selected_user, on_change):
     try:
         preferences = load_settings(preferences_path)
     except (OSError, ValueError) as error:
-        modal_message(tr('Не удалось открыть список пользователей'), str(error), parent=root)
+        modal_message(tr("error.open_users"), str(error), parent=root)
         return
     on_change(preferences)
-    dialog, frame = create_dialog(root, tr('Просмотр пользователей'), resizable=True)
+    dialog, frame = create_dialog(root, tr("user.view"), resizable=True)
     frame.columnconfigure(0, weight=1)
     frame.rowconfigure(0, weight=1)
     table = ttk.Treeview(frame, columns=("login",), show="headings", selectmode="browse", height=8)
-    table.heading("login", text=tr('Пользователь GitHub'), anchor="w")
+    table.heading("login", text=tr("user.github"), anchor="w")
     table.column("login", width=360, minwidth=180)
     scrollbar = ctk.CTkScrollbar(frame, orientation="vertical", command=table.yview)
     table.configure(yscrollcommand=scrollbar.set)
@@ -160,9 +160,9 @@ def open_users(root, preferences_path, selected_user, on_change):
             data = load_settings(preferences_path)
             users = data["users"]
             if original not in users:
-                raise ValueError(tr('Этот пользователь больше не сохранён.'))
+                raise ValueError(tr("error.user_missing"))
             if any(user != original and user.casefold() == name.casefold() for user in users):
-                raise ValueError(tr('Пользователь с таким логином уже сохранён.'))
+                raise ValueError(tr("error.user_exists"))
             if name != original:
                 users[name] = users.pop(original)
                 for profile in data["profiles"].values():
@@ -187,8 +187,8 @@ def open_users(root, preferences_path, selected_user, on_change):
             return
         name = selection[0]
         if not modal_message(
-            tr('Удаление пользователя'),
-            tr('Удалить пользователя «{name}» и все связанные с ним профили?', name=name),
+            tr("user.delete_title"),
+            tr("user.delete_confirm", name=name),
             parent=dialog, question=True, warning=True,
         ):
             return
@@ -203,7 +203,7 @@ def open_users(root, preferences_path, selected_user, on_change):
                 data["default_profile"] = None
             save_preferences(preferences_path, data)
         except (OSError, ValueError) as error:
-            modal_message(tr('Не удалось удалить пользователя'), str(error), parent=dialog)
+            modal_message(tr("error.delete_user"), str(error), parent=dialog)
             return
         preferences = data
         on_change(data, original=name)
@@ -215,11 +215,11 @@ def open_users(root, preferences_path, selected_user, on_change):
             table.selection_set(item)
             edit()
 
-    edit_button = button_widget(actions, text=tr('Редактировать'), command=edit)
+    edit_button = button_widget(actions, text=tr("button.edit"), command=edit)
     edit_button.pack(side="left")
-    delete_button = button_widget(actions, text=tr('Удалить'), command=delete)
+    delete_button = button_widget(actions, text=tr("button.delete"), command=delete)
     delete_button.pack(side="left", padx=6)
-    close_button = button_widget(actions, text=tr('Закрыть'))
+    close_button = button_widget(actions, text=tr("button.close"))
     close_button.pack(side="right")
     table.bind("<<TreeviewSelect>>", update_actions)
     table.bind("<Double-1>", edit_row)

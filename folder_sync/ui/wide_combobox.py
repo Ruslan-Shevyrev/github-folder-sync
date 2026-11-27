@@ -5,7 +5,6 @@ import customtkinter as ctk
 
 class WideComboBox(ctk.CTkComboBox):
     def _open_dropdown_menu(self):
-        # CustomTkinter 5.2.2 uses a native menu sized to its labels.
         values = self.cget("values")
         if not values:
             return
