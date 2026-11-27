@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .branches import Branch
 from .comparison import Match
-from .settings import copy_if_newer, fallback_settings_path, save_settings
+from .settings import copy_if_newer, fallback_settings_path, portable_settings_path, save_settings
 
 
 def profile_cache_path(settings_file, name, folder, login, authenticated):
@@ -21,18 +21,29 @@ def cache_for_profile(settings_file, name, profile, users):
     return profile_cache_path(settings_file, name, profile["folder"], login, authenticated)
 
 
-def restore_newer_cache(settings_file, preferences):
+def sync_cache_locations(settings_file, preferences):
+    portable = portable_settings_path()
     fallback = fallback_settings_path()
-    if fallback is None or fallback == settings_file:
+    if fallback is None or fallback == portable:
+        return
+    try:
+        if settings_file == portable and not fallback.parent.parent.is_dir():
+            return
+    except OSError:
         return
 
-    for name, profile in preferences["profiles"].items():
-        destination = cache_for_profile(settings_file, name, profile, preferences["users"])
-        source = fallback.parent.parent / "cache" / destination.name
-        try:
-            copy_if_newer(source, destination)
-        except OSError:
-            continue
+    directions = [(portable, fallback)]
+    if settings_file == portable:
+        directions.insert(0, (fallback, portable))
+
+    for source_settings, destination_settings in directions:
+        for name, profile in preferences["profiles"].items():
+            source = cache_for_profile(source_settings, name, profile, preferences["users"])
+            destination = cache_for_profile(destination_settings, name, profile, preferences["users"])
+            try:
+                copy_if_newer(source, destination)
+            except OSError:
+                continue
 
 
 def reconcile_cache(settings_file, preferences, renamed=None):

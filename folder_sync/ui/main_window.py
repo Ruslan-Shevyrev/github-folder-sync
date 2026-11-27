@@ -13,7 +13,7 @@ import customtkinter as ctk
 
 from ..branches import BranchError, github_repository
 from ..comparison import compare, delete_local_folder, refresh_repository, with_branches
-from ..comparison_cache import cache_for_profile, load_cache, reconcile_cache, restore_newer_cache, save_cache
+from ..comparison_cache import cache_for_profile, load_cache, reconcile_cache, save_cache, sync_cache_locations
 from ..git_sync import change_origin, clone_from_github, corrected_origin, read_local_origin, sync_from_github
 from ..settings import load_settings, resolve_token, save_settings, settings_path
 from .app_theme import THEMES, WHITE, set_theme, theme_color
@@ -53,7 +53,7 @@ def run():
     path = settings_path()
     try:
         preferences = load_settings(path)
-        restore_newer_cache(path, preferences)
+        sync_cache_locations(path, preferences)
         reconcile_cache(path, preferences)
     except (OSError, ValueError):
         preferences = {}

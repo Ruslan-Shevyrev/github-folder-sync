@@ -29,6 +29,7 @@ def copy_if_newer(source, destination):
         except FileNotFoundError:
             pass
 
+        destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = None
         try:
             with NamedTemporaryFile(dir=destination.parent, suffix=".tmp", delete=False) as output:
@@ -41,30 +42,38 @@ def copy_if_newer(source, destination):
                 temporary.unlink(missing_ok=True)
 
 
-def settings_path():
+def portable_settings_path():
     if getattr(sys, "frozen", False):
         directory = Path(sys.executable).resolve().parent
     else:
         directory = Path(__file__).resolve().parents[1]
-    portable = directory / "settings" / "settings.json"
+    return directory / "settings" / "settings.json"
+
+
+def settings_path():
+    portable = portable_settings_path()
     fallback = fallback_settings_path()
     if fallback is None or fallback == portable:
         return portable
 
+    active = portable
     try:
-        for data_directory in (portable.parent, directory / "cache"):
+        for data_directory in (portable.parent, portable.parent.parent / "cache"):
             data_directory.mkdir(parents=True, exist_ok=True)
             with NamedTemporaryFile(dir=data_directory):
                 pass
+        copy_if_newer(fallback, portable)
     except OSError as error:
         if isinstance(error, PermissionError) or error.errno == errno.EROFS:
-            return fallback
-        return portable
+            active = fallback
+
     try:
-        copy_if_newer(fallback, portable)
+        if active == fallback or fallback.parent.parent.is_dir():
+            copy_if_newer(portable, fallback)
     except OSError:
-        return fallback
-    return portable
+        # The active copy is still usable when the other location is inaccessible.
+        pass
+    return active
 
 
 def validate_token_reference(value):
