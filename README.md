@@ -32,7 +32,7 @@ Enter the token directly or use `v{VARIABLE_NAME}` to read it from a Windows env
 
 ## Settings and cache
 
-The app stores settings in `settings/settings.json` and the last comparison for each profile in `cache/`, next to the EXE or in the project root when running from source. Git ignores both folders.
+The app stores settings in `settings/settings.json` and the last comparison for each profile in `cache/`, next to the EXE or in the project root when running from source. If the app cannot write there, it uses the same subfolders under `%LOCALAPPDATA%\GitHubFolderSync`. Git ignores both folders in the project.
 
 Selecting a profile with a saved result opens its table immediately and shows **Cached results** above it. Click **Compare** for fresh results. The **Needs attention** filter works on the loaded table without contacting GitHub.
 

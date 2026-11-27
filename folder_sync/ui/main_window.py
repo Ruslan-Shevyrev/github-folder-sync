@@ -50,8 +50,8 @@ class MainWindow(ctk.CTk):
 
 
 def run():
+    path = settings_path()
     try:
-        path = settings_path()
         preferences = load_settings(path)
         reconcile_cache(path, preferences)
     except (OSError, ValueError):
@@ -76,19 +76,18 @@ def run():
         ctk.set_appearance_mode(theme)
         root.configure(fg_color=theme_color("background"))
         configure_theme(root)
-        result = run_window(root, language, theme, snapshot)
+        result = run_window(root, language, theme, path, snapshot)
         if result is None:
             break
         language, theme, snapshot = result
 
 
-def run_window(root, language, theme, snapshot=None):
+def run_window(root, language, theme, preferences_path, snapshot=None):
     root.title(tr("window.title"))
     folder = tk.StringVar()
     login = tk.StringVar()
     profile_name = tk.StringVar()
     status = tk.StringVar(value=tr("compare.initial"))
-    preferences_path = settings_path()
     try:
         preferences = load_settings(preferences_path)
     except (OSError, ValueError) as error:

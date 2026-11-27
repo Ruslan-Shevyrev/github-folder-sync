@@ -1,3 +1,4 @@
+import errno
 import json
 import os
 import re
@@ -11,7 +12,21 @@ def settings_path():
         directory = Path(sys.executable).resolve().parent
     else:
         directory = Path(__file__).resolve().parents[1]
-    return directory / "settings" / "settings.json"
+    portable = directory / "settings" / "settings.json"
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if not local_app_data:
+        return portable
+    fallback = Path(local_app_data) / "GitHubFolderSync" / "settings" / "settings.json"
+
+    try:
+        for data_directory in (portable.parent, directory / "cache"):
+            data_directory.mkdir(parents=True, exist_ok=True)
+            with NamedTemporaryFile(dir=data_directory):
+                pass
+    except OSError as error:
+        if isinstance(error, PermissionError) or error.errno == errno.EROFS:
+            return fallback
+    return portable
 
 
 def validate_token_reference(value):
