@@ -11,6 +11,7 @@ ENGLISH = {
     'Отмена': 'Cancel',
     'Подтвердить': 'Confirm',
     'Сохранить': 'Save',
+    'Сохранить как профиль': 'Save as profile',
     'Не удалось сохранить': 'Could not save',
     'Необходимо для приватных токенов': 'Required for private repositories',
     'Токен или v{ИМЯ_ПЕРЕМЕННОЙ}': 'Token or v{VARIABLE_NAME}',

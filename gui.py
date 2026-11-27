@@ -14,50 +14,48 @@ import customtkinter as ctk
 from branches import BranchError, github_repository
 from localization import LANGUAGES, error_text, set_language, tr
 from comparison_cache import load_cache, profile_cache_path, save_cache
-from dialog_position import center_windows_dialog
+from dialog_position import center_windows_dialog, set_windows_titlebar_theme
 from comparison import compare, delete_local_folder, refresh_repository, validate_login, with_branches
 from git_sync import change_origin, clone_from_github, corrected_origin, read_local_origin, sync_from_github
 from settings import load_settings, resolve_token, save_settings, settings_path, validate_token_reference
 from results_table import ResultsTable
+from app_theme import THEMES, WHITE, set_theme, theme_color
 from wide_combobox import WideComboBox
 
 
 STATUSES = {
-    "both": ("Есть в обоих местах", "#20372f", "#b8f5cf"),
-    "github": ("Только на GitHub", "#2e3242", "#dcdfeb"),
-    "local": ("Только локально", "#432b37", "#ffc4cb"),
+    "both": "Есть в обоих местах",
+    "github": "Только на GitHub",
+    "local": "Только локально",
 }
 
 
-BACKGROUND = "#111522"
-PANEL = "#191e2f"
-FIELD = "#23283c"
-BORDER = "#42495f"
-TEXT = "#f4f2fb"
-MUTED = "#b9bdd1"
-ACCENT = "#7446ee"
 FONT = ("Segoe UI", 13)
+
+
+def status_style(key):
+    return STATUSES[key], theme_color(f"{key}_bg"), theme_color(f"{key}_fg")
 
 
 def button_widget(parent, *, primary=False, **options):
     return ctk.CTkButton(
-        parent, font=FONT, text_color=TEXT, text_color_disabled="#9398ad",
-        fg_color=ACCENT if primary else FIELD, hover_color="#895dff" if primary else "#353d55",
-        border_width=0 if primary else 1, border_color=BORDER, corner_radius=8,
+        parent, font=FONT, text_color=WHITE if primary else theme_color("text"), text_color_disabled=theme_color("disabled_text"),
+        fg_color=theme_color("accent") if primary else theme_color("field"), hover_color=theme_color("accent_hover") if primary else theme_color("hover"),
+        border_width=0 if primary else 1, border_color=theme_color("border"), corner_radius=8,
         width=110, height=34, **options
     )
 
 
 def entry_widget(parent, **options):
-    return ctk.CTkEntry(parent, font=FONT, text_color=TEXT, fg_color=FIELD, border_color=BORDER,
+    return ctk.CTkEntry(parent, font=FONT, text_color=theme_color("text"), fg_color=theme_color("field"), border_color=theme_color("border"),
                         border_width=1, corner_radius=8, height=34, **options)
 
 
 def combo_widget(parent, **options):
     return WideComboBox(
-        parent, font=FONT, dropdown_font=FONT, text_color=TEXT, fg_color=FIELD, border_color=BORDER,
-        button_color=FIELD, button_hover_color="#353d55", dropdown_fg_color=FIELD,
-        dropdown_hover_color="#353d55", dropdown_text_color=TEXT,
+        parent, font=FONT, dropdown_font=FONT, text_color=theme_color("text"), fg_color=theme_color("field"), border_color=theme_color("border"),
+        button_color=theme_color("field"), button_hover_color=theme_color("hover"), dropdown_fg_color=theme_color("field"),
+        dropdown_hover_color=theme_color("hover"), dropdown_text_color=theme_color("text"),
         border_width=1, corner_radius=8, height=34, state="readonly", **options
     )
 
@@ -65,21 +63,21 @@ def combo_widget(parent, **options):
 def label_widget(parent, *, heading=False, muted=False, **options):
     return ctk.CTkLabel(
         parent, font=("Segoe UI", 21, "bold") if heading else FONT,
-        text_color=MUTED if muted else TEXT, **options
+        text_color=theme_color("muted") if muted else theme_color("text"), **options
     )
 
 
 def configure_theme(root):
     style = ttk.Style(root)
     style.theme_use("clam")
-    style.configure(".", background="#191d30", foreground="#f4f1ff", font=("Segoe UI", 10))
-    style.configure("Treeview", background="#101321", fieldbackground="#101321",
-                    foreground="#f4f1ff", rowheight=27)
-    style.configure("Treeview.Heading", background="#222740", foreground="#f4f1ff",
-                    bordercolor="#343956", lightcolor="#222740", darkcolor="#222740")
-    style.map("Treeview.Heading", background=[("pressed", "#4a347a"), ("active", "#343052")],
-              foreground=[("pressed", "#f4f1ff"), ("active", "#f4f1ff")])
-    style.map("Treeview", background=[("selected", "#513ca0")],
+    style.configure(".", background=theme_color("panel"), foreground=theme_color("text"), font=("Segoe UI", 10))
+    style.configure("Treeview", background=theme_color("table"), fieldbackground=theme_color("table"),
+                    foreground=theme_color("text"), rowheight=27)
+    style.configure("Treeview.Heading", background=theme_color("header"), foreground=theme_color("text"),
+                    bordercolor=theme_color("table_border"), lightcolor=theme_color("header"), darkcolor=theme_color("header"))
+    style.map("Treeview.Heading", background=[("pressed", theme_color("header_pressed")), ("active", theme_color("header_hover"))],
+              foreground=[("pressed", theme_color("text")), ("active", theme_color("text"))])
+    style.map("Treeview", background=[("selected", theme_color("selection"))],
               foreground=[("selected", "#ffffff")])
 
 
@@ -100,7 +98,7 @@ def edit_shortcut_on_windows(event):
 
 
 def create_dialog(parent, title, *, resizable=False):
-    dialog = ctk.CTkToplevel(parent, fg_color=PANEL)
+    dialog = ctk.CTkToplevel(parent, fg_color=theme_color("panel"))
     dialog.withdraw()
     dialog.title(title)
     dialog.transient(parent)
@@ -145,7 +143,7 @@ def confirm_action(parent, title, details, button_text, on_confirm, *, destructi
     cancel.pack(side="left", padx=(0, 6))
     confirm = button_widget(actions, text=button_text, primary=True)
     if destructive:
-        confirm.configure(fg_color="#983c53", hover_color="#b94c67")
+        confirm.configure(fg_color=theme_color("danger"), hover_color=theme_color("danger_hover"))
     confirm.pack(side="left")
 
     close = show_dialog(dialog, cancel)
@@ -242,10 +240,10 @@ def token_help(parent, container):
         nonlocal tooltip
         if tooltip is not None:
             return
-        tooltip = tk.Toplevel(parent, background=BORDER)
+        tooltip = tk.Toplevel(parent, background=theme_color("border"))
         tooltip.withdraw()
         tooltip.overrideredirect(True)
-        frame = ctk.CTkFrame(tooltip, fg_color=FIELD, corner_radius=0)
+        frame = ctk.CTkFrame(tooltip, fg_color=theme_color("field"), corner_radius=0)
         frame.pack(padx=1, pady=1)
         label_widget(frame, text="\n".join(map(tr, TOKEN_HELP_LINES)), justify="left", anchor="w").pack(
             padx=10, pady=5
@@ -259,8 +257,8 @@ def token_help(parent, container):
         modal_message(tr(TOKEN_HELP_LINES[0]), "\n".join(map(tr, TOKEN_HELP_LINES[1:])), parent=parent, heading=False)
 
     button = ctk.CTkButton(container, text="?", width=22, height=22, corner_radius=11,
-                           border_width=1, border_color=BORDER, fg_color=FIELD,
-                           hover_color="#353d55", text_color=TEXT, font=("Segoe UI", 13, "bold"),
+                           border_width=1, border_color=theme_color("border"), fg_color=theme_color("field"),
+                           hover_color=theme_color("hover"), text_color=theme_color("text"), font=("Segoe UI", 13, "bold"),
                            command=open_help)
     button.bind("<Enter>", show, add="+")
     button.bind("<Leave>", hide, add="+")
@@ -287,11 +285,11 @@ def user_dialog(parent, on_save, *, login="", token=""):
     def toggle_token():
         reveal = bool(token_input.cget("show"))
         token_input.configure(show="" if reveal else "*")
-        eye.configure(fg_color="#353d55" if reveal else FIELD)
+        eye.configure(fg_color=theme_color("hover") if reveal else theme_color("field"))
 
     eye = ctk.CTkButton(token_row, text="\U0001f441", width=34, height=34, corner_radius=8,
-                        border_width=1, border_color=BORDER, fg_color=FIELD,
-                        hover_color="#353d55", text_color=TEXT, font=("Segoe UI Symbol", 16),
+                        border_width=1, border_color=theme_color("border"), fg_color=theme_color("field"),
+                        hover_color=theme_color("hover"), text_color=theme_color("text"), font=("Segoe UI Symbol", 16),
                         command=toggle_token)
     eye.grid(row=0, column=1, padx=(8, 0))
     dialog_actions(dialog, frame, 4, entry, lambda: on_save(entry.get().strip(), token_input.get().strip()))
@@ -326,7 +324,7 @@ def profile_dialog(parent, profile, on_save, *, users=(), name="", is_default=Fa
         button_widget(frame, text=tr('Обзор…'), command=browse).grid(row=2, column=2, padx=(8, 0), pady=(0, 8))
 
     default = tk.BooleanVar(master=dialog, value=is_default)
-    ctk.CTkCheckBox(frame, font=FONT, fg_color=ACCENT, hover_color="#895dff", border_color=BORDER, text_color=TEXT, text=tr('Настройки по умолчанию'), variable=default).grid(
+    ctk.CTkCheckBox(frame, font=FONT, fg_color=theme_color("accent"), hover_color=theme_color("accent_hover"), checkmark_color=WHITE, border_color=theme_color("border"), text_color=theme_color("text"), text=tr('Настройки по умолчанию'), variable=default).grid(
         row=3, column=1, sticky="w", pady=(0, 10)
     )
     dialog_actions(dialog, frame, 4, name_input, lambda: on_save(
@@ -334,28 +332,42 @@ def profile_dialog(parent, profile, on_save, *, users=(), name="", is_default=Fa
     ))
 
 
+class MainWindow(ctk.CTk):
+    def _windows_set_titlebar_color(self, color_mode):
+        # CustomTkinter 5.2.2 normally withdraws the window to repaint its frame.
+        set_windows_titlebar_theme(self, color_mode.lower() == "dark")
+
+
 def run():
     try:
-        language = load_settings(settings_path()).get("language")
+        preferences = load_settings(settings_path())
     except (OSError, ValueError):
-        language = None
+        preferences = {}
+    language = preferences.get("language")
+    theme = preferences.get("theme")
+    if theme not in THEMES:
+        theme = "Dark"
     if language not in ("ru", "en"):
         language = "ru"
-    ctk.set_appearance_mode("dark")
-    root = ctk.CTk(fg_color=BACKGROUND)
+    set_theme(theme)
+    ctk.set_appearance_mode(theme)
+    root = MainWindow(fg_color=theme_color("background"))
     root.geometry("1080x560")
     root.minsize(760, 360)
-    configure_theme(root)
     snapshot = None
     while True:
         set_language(language)
-        result = run_window(root, language, snapshot)
+        set_theme(theme)
+        ctk.set_appearance_mode(theme)
+        root.configure(fg_color=theme_color("background"))
+        configure_theme(root)
+        result = run_window(root, language, theme, snapshot)
         if result is None:
             break
-        language, snapshot = result
+        language, theme, snapshot = result
 
 
-def run_window(root, language, snapshot=None):
+def run_window(root, language, theme, snapshot=None):
     root.title(tr('Папки и репозитории GitHub'))
     folder = tk.StringVar()
     login = tk.StringVar()
@@ -377,35 +389,46 @@ def run_window(root, language, snapshot=None):
 
     next_window = None
 
-    def switch_language(chosen):
+    def switch_appearance(key, value):
         nonlocal next_window
-        selected = next(code for code, label in LANGUAGES.items() if label == chosen)
-        if selected == language:
+        new_language = value if key == "language" else language
+        new_theme = value if key == "theme" else theme
+        if (new_language, new_theme) == (language, theme):
             return
         try:
             data = load_settings(preferences_path)
-            data["language"] = selected
+            data[key] = value
             save_settings(preferences_path, data)
         except (OSError, ValueError) as error:
             language_display.set(LANGUAGES[language])
+            theme_display.set(theme)
             modal_message(tr("Не удалось сохранить"), str(error), parent=root)
             return
-        next_window = (selected, {
+        next_window = (new_language, new_theme, {
             "folder": folder.get(), "login": login.get(), "profile": profile_name.get(),
             "only_problems": only_problems.get(), "rows": list(all_rows.values()),
             "cached": from_cache, "compared": compared, "cache": active_cache,
         })
         root.quit()
 
-    panel = ctk.CTkFrame(root, fg_color=PANEL, corner_radius=12, border_width=1, border_color="#30374d")
+    panel = ctk.CTkFrame(root, fg_color=theme_color("panel"), corner_radius=12, border_width=1, border_color=theme_color("panel_border"))
     panel.pack(fill="both", expand=True, padx=12, pady=12)
     panel.grid_propagate(False)
     panel.columnconfigure(1, weight=1)
     panel.rowconfigure(6, weight=1)
+    appearance = ctk.CTkFrame(panel, fg_color="transparent")
+    appearance.grid(row=0, column=2, sticky="e", padx=(0, 16), pady=(14, 12))
     language_display = tk.StringVar(master=root, value=LANGUAGES[language])
-    language_picker = combo_widget(panel, variable=language_display, values=list(LANGUAGES.values()),
-                                   width=135, command=switch_language)
-    language_picker.grid(row=0, column=2, sticky="e", padx=(0, 16), pady=(14, 12))
+    language_codes = {label: code for code, label in LANGUAGES.items()}
+    language_picker = combo_widget(
+        appearance, variable=language_display, values=list(language_codes), width=135,
+        command=lambda chosen: switch_appearance("language", language_codes[chosen]),
+    )
+    language_picker.pack(side="left")
+    theme_display = tk.StringVar(master=root, value=theme)
+    theme_picker = combo_widget(appearance, variable=theme_display, values=list(THEMES), width=105,
+                                command=lambda chosen: switch_appearance("theme", chosen))
+    theme_picker.pack(side="left", padx=(8, 0))
     label_widget(panel, text=tr('Репозитории GitHub'), heading=True).grid(
         row=0, column=0, columnspan=3, sticky="w", padx=(16, 0), pady=(14, 12)
     )
@@ -727,7 +750,7 @@ def run_window(root, language, snapshot=None):
 
     add_button = button_widget(panel, text=tr('Добавить пользователя'), command=lambda: user_dialog(root, add_user))
     add_button.grid(row=1, column=2, sticky="ew", padx=(0, 16))
-    save_button = button_widget(panel, text=tr('Сохранить'), command=open_profile_dialog)
+    save_button = button_widget(panel, text=tr('Сохранить как профиль'), command=open_profile_dialog)
     save_button.grid(row=3, column=2, sticky="ew", padx=(0, 16))
     navigation = ctk.CTkFrame(panel, fg_color="transparent")
     navigation.grid(row=4, column=1, sticky="e", padx=8, pady=(8, 0))
@@ -768,9 +791,9 @@ def run_window(root, language, snapshot=None):
 
     def set_busy(busy):
         for widget in controls:
-            state = "disabled" if busy else ("readonly" if widget in (login_input, profile_input) else "normal")
+            state = "disabled" if busy else ("readonly" if widget in (login_input, profile_input, language_picker, theme_picker) else "normal")
             widget.configure(state=state)
-        folder_input.configure(text_color="#9398ad" if busy else TEXT)
+        folder_input.configure(text_color=theme_color("disabled_text") if busy else theme_color("text"))
         table.set_actions_enabled(not busy)
 
     def show_loader(action):
@@ -895,7 +918,7 @@ def run_window(root, language, snapshot=None):
     )
     loader_group = ctk.CTkFrame(status_line, fg_color="transparent")
     loader_group.grid(row=0, column=1, padx=(12, 0))
-    loader = ctk.CTkProgressBar(loader_group, mode="indeterminate", width=140, fg_color=FIELD, progress_color=ACCENT)
+    loader = ctk.CTkProgressBar(loader_group, mode="indeterminate", width=140, fg_color=theme_color("field"), progress_color=theme_color("accent"))
     loader.pack(side="left")
     loader_label = label_widget(loader_group, text="")
     loader_label.pack(side="left", padx=(10, 0))
@@ -904,12 +927,12 @@ def run_window(root, language, snapshot=None):
     table_notes = ctk.CTkFrame(panel, fg_color="transparent")
     table_notes.grid(row=5, column=0, columnspan=3, sticky="ew", padx=16, pady=(5, 5))
     cache_notice = label_widget(table_notes, text=tr('Данные из кэша'), muted=True)
-    cache_notice.configure(text_color="#ff999f")
+    cache_notice.configure(text_color=theme_color("branch_red"))
     cache_notice.grid(row=0, column=1, sticky="w", padx=(12, 0))
     cache_notice.grid_remove()
     problem_filter = ctk.CTkCheckBox(
-        table_notes, text=tr('Требуют внимания'), variable=only_problems, font=FONT, text_color=TEXT,
-        fg_color=ACCENT, hover_color="#895dff", border_color=BORDER, command=lambda: redraw_rows(),
+        table_notes, text=tr('Требуют внимания'), variable=only_problems, font=FONT, text_color=theme_color("text"),
+        fg_color=theme_color("accent"), hover_color=theme_color("accent_hover"), checkmark_color=WHITE, border_color=theme_color("border"), command=lambda: redraw_rows(),
     )
     problem_filter.grid(row=0, column=0, sticky="w")
 
@@ -923,13 +946,13 @@ def run_window(root, language, snapshot=None):
         all_rows[row.name] = row
         counts[row.status] += 1
         if is_visible(row):
-            table.add(row, STATUSES[row.status])
+            table.add(row, status_style(row.status))
 
     def redraw_rows():
         table.clear()
         for row in all_rows.values():
             if is_visible(row):
-                table.add(row, STATUSES[row.status])
+                table.add(row, status_style(row.status))
 
     def reset_results():
         all_rows.clear()
@@ -948,7 +971,7 @@ def run_window(root, language, snapshot=None):
         return profile_cache_path(preferences_path, name, path, login.get(), authenticated)
 
     def summary_text():
-        return "  ·  ".join(f"{tr(label)}: {counts[key]}" for key, (label, _, _) in STATUSES.items())
+        return "  ·  ".join(f"{tr(label)}: {counts[key]}" for key, label in STATUSES.items())
 
     def show_profile_cache():
         nonlocal compared, active_cache, from_cache
@@ -1013,7 +1036,7 @@ def run_window(root, language, snapshot=None):
                         counts[updated.status] += 1
                     if previous.name in table.rows:
                         if updated is not None and is_visible(updated):
-                            table.update_row(previous.name, updated, STATUSES[updated.status])
+                            table.update_row(previous.name, updated, status_style(updated.status))
                         else:
                             table.update_row(previous.name)
                     elif updated is not None and is_visible(updated):
@@ -1058,7 +1081,7 @@ def run_window(root, language, snapshot=None):
     button = button_widget(panel, text=tr('Сравнить'), primary=True, command=submit)
     button.grid(row=4, column=2, sticky="ew", padx=(0, 16), pady=(8, 0))
     controls = (folder_input, login_input, profile_input, browse, add_button, save_button,
-                profiles_button, users_button, problem_filter, language_picker, button)
+                profiles_button, users_button, problem_filter, language_picker, theme_picker, button)
     if snapshot is not None:
         folder.set(snapshot["folder"])
         login.set(snapshot["login"])

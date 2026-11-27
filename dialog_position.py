@@ -11,6 +11,26 @@ class MonitorInfo(ctypes.Structure):
     ]
 
 
+def set_windows_titlebar_theme(window, dark):
+    user = ctypes.WinDLL("user32")
+    user.GetAncestor.argtypes = (wintypes.HWND, wintypes.UINT)
+    user.GetAncestor.restype = wintypes.HWND
+    hwnd = user.GetAncestor(window.winfo_id(), 2)
+    if not hwnd:
+        return
+
+    dwm = ctypes.WinDLL("dwmapi")
+    dwm.DwmSetWindowAttribute.argtypes = (
+        wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD
+    )
+    value = wintypes.BOOL(dark)
+    if dwm.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), ctypes.sizeof(value)) != 0:
+        dwm.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(value), ctypes.sizeof(value))
+
+    user.RedrawWindow.argtypes = (wintypes.HWND, ctypes.c_void_p, ctypes.c_void_p, wintypes.UINT)
+    user.RedrawWindow(hwnd, None, None, 0x0400 | 0x0100 | 0x0001)  # FRAME | UPDATENOW | INVALIDATE
+
+
 def center_windows_dialog(dialog):
     user = ctypes.WinDLL("user32", use_last_error=True)
     user.GetAncestor.argtypes = (wintypes.HWND, wintypes.UINT)

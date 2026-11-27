@@ -2,6 +2,7 @@ import tkinter as tk
 import webbrowser
 import customtkinter as ctk
 
+from app_theme import theme_color
 from localization import error_text, tr
 
 
@@ -21,13 +22,6 @@ COLUMNS = (
 FLEXIBLE_COLUMNS = {"name", "status", "branches", "path", "github"}
 
 
-BRANCH_COLORS = {
-    "green": "#83eca4",
-    "yellow": "#ffe08a",
-    "red": "#ff999f",
-    "gray": "#c3c6d2",
-}
-
 BRANCH_LABELS = {
     "equal": ("совпадает", "green"),
     "local": ("только локально", "yellow"),
@@ -40,11 +34,11 @@ BRANCH_LABELS = {
 class ResultsTable(ctk.CTkFrame):
     def __init__(self, parent, on_sync=None, on_refresh=None, on_delete=None,
                  on_fix_origin=None, on_open_folder=None):
-        super().__init__(parent, fg_color="#101421", border_color="#343a50",
+        super().__init__(parent, fg_color=theme_color("table_frame"), border_color=theme_color("table_border"),
                          border_width=1, corner_radius=10)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
-        self.canvas = tk.Canvas(self, background="#101321", highlightthickness=0)
+        self.canvas = tk.Canvas(self, background=theme_color("table"), highlightthickness=0)
         vertical = ctk.CTkScrollbar(self, orientation="vertical", command=self.canvas.yview)
         horizontal = ctk.CTkScrollbar(self, orientation="horizontal", command=self.canvas.xview)
         self.canvas.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
@@ -148,15 +142,15 @@ class ResultsTable(ctk.CTkFrame):
         self.width = sum(width for _, _, width in self.columns)
         self.bottom = 34
         self.rows = {}
-        self.canvas.create_rectangle(0, 0, self.width, self.bottom, fill="#222740", outline="")
+        self.canvas.create_rectangle(0, 0, self.width, self.bottom, fill=theme_color("header"), outline="")
         x = 0
         for _, title, width in self.columns:
-            self.text(x + 8, 7, tr(title), "#f4f1ff", width - 16, bold=True)
+            self.text(x + 8, 7, tr(title), theme_color("text"), width - 16, bold=True)
             x += width
         self.canvas.configure(scrollregion=(0, 0, self.width, self.bottom))
 
     def text(self, x, y, label, color, width=None, *, bold=False):
-        font = ("Segoe UI", 10, "bold" if bold else "normal")
+        font = ("Segoe UI", 12, "bold" if bold else "normal")
         return self.canvas.create_text(x, y, anchor="nw", text=label, fill=color, width=width or 0,
                                        font=font)
 
@@ -217,11 +211,12 @@ class ResultsTable(ctk.CTkFrame):
                                  hint=tr("Обновить"))
             elif column == "delete" and row.local_path and self.on_delete is not None:
                 self.draw_button(x + 7, top + 6, None, 28, lambda: self.on_delete(row),
-                                 hint=tr("Удалить"), background="#813c51", active="#a24f67", icon=self.draw_trash_icon)
+                                 hint=tr("Удалить"), background=theme_color("delete"), active=theme_color("delete_hover"), icon=self.draw_trash_icon)
             elif column == "branches":
                 bottom = max(bottom, self.draw_branches(row, x + 8, top + 6, width - 16, sync_x) + 6)
             elif value:
-                item = self.text(x + 8, top + 6, value, foreground, width - 16)
+                color = theme_color("link") if column == "github" else foreground
+                item = self.text(x + 8, top + 6, value, color, width - 16)
                 bottom = max(bottom, self.canvas.bbox(item)[3] + 7)
                 if column == "number":
                     number_item = item
@@ -231,7 +226,7 @@ class ResultsTable(ctk.CTkFrame):
                     self.bind_link(item, lambda path=value: self.on_open_folder(path))
             x += width
         self.canvas.coords(backdrop, 0, top, self.width, bottom)
-        last_item = self.canvas.create_line(0, bottom, self.width, bottom, fill="#343956")
+        last_item = self.canvas.create_line(0, bottom, self.width, bottom, fill=theme_color("table_border"))
         tag = f"row-{backdrop}"
         for item in range(backdrop, last_item + 1):
             self.canvas.addtag_withtag(tag, item)
@@ -245,18 +240,18 @@ class ResultsTable(ctk.CTkFrame):
 
     def show_tooltip(self, event, text, *, monospace=False):
         self.hide_tooltip()
-        tooltip = tk.Toplevel(self.canvas, background="#343956")
+        tooltip = tk.Toplevel(self.canvas, background=theme_color("table_border"))
         self.tooltip = tooltip
         tooltip.wm_overrideredirect(True)
         font = ("Consolas" if monospace else "Segoe UI", 12)
-        ctk.CTkLabel(tooltip, text=text, font=font, fg_color="#23283c").pack(padx=6, pady=2)
+        ctk.CTkLabel(tooltip, text=text, font=font, fg_color=theme_color("field")).pack(padx=6, pady=2)
         tooltip.update_idletasks()
         x = min(event.x_root + 12, tooltip.winfo_screenwidth() - tooltip.winfo_reqwidth())
         y = min(event.y_root + 18, tooltip.winfo_screenheight() - tooltip.winfo_reqheight())
         tooltip.geometry(f"+{max(0, x)}+{max(0, y)}")
 
     def draw_commit(self, x, y, side, commit, color, width):
-        item = self.text(x, y, f"{side} ({commit[:12]})", BRANCH_COLORS[color], width)
+        item = self.text(x, y, f"{side} ({commit[:12]})", theme_color(f"branch_{color}"), width)
         self.bind_item(item, item, "<Enter>", lambda event: self.show_tooltip(event, commit, monospace=True))
         self.bind_item(item, item, "<Leave>", self.hide_tooltip)
         return item
@@ -281,26 +276,28 @@ class ResultsTable(ctk.CTkFrame):
             self.canvas.configure(cursor="")
 
     def draw_trash_icon(self, x, y, tag):
-        self.canvas.create_line(x - 7, y - 4, x + 7, y - 4, fill="#ffffff", disabledfill="#9297ac", tags=tag)
+        self.canvas.create_line(x - 7, y - 4, x + 7, y - 4, fill="#ffffff", disabledfill=theme_color("disabled_icon"), tags=tag)
         self.canvas.create_line(x - 3, y - 4, x - 3, y - 7, x + 3, y - 7, x + 3, y - 4,
-                                fill="#ffffff", disabledfill="#9297ac", tags=tag)
+                                fill="#ffffff", disabledfill=theme_color("disabled_icon"), tags=tag)
         self.canvas.create_line(x - 5, y - 2, x - 4, y + 7, x + 4, y + 7, x + 5, y - 2,
-                                fill="#ffffff", disabledfill="#9297ac", tags=tag)
+                                fill="#ffffff", disabledfill=theme_color("disabled_icon"), tags=tag)
 
-    def draw_button(self, x, y, label, width, command, *, hint, background="#7446ee",
-                    active="#865cff", icon=None):
+    def draw_button(self, x, y, label, width, command, *, hint, background=None,
+                    active=None, icon=None):
+        background = background or theme_color("accent")
+        active = active or theme_color("accent_hover")
         radius = 5
         right, bottom = x + width, y + 23
         button = self.canvas.create_polygon(
             x, y + radius, x, y, x + radius, y, right - radius, y, right, y,
             right, y + radius, right, bottom - radius, right, bottom, right - radius, bottom,
-            x + radius, bottom, x, bottom, x, bottom - radius, smooth=True, fill=background, disabledfill="#3b4155",
+            x + radius, bottom, x, bottom, x, bottom - radius, smooth=True, fill=background, disabledfill=theme_color("disabled_fill"),
         )
         tag = f"button-{button}"
         self.canvas.addtag_withtag(tag, button)
         center_x, center_y = x + width / 2, y + 11
         if icon is None:
-            self.canvas.create_text(center_x, center_y, text=label, fill="#ffffff", disabledfill="#9297ac",
+            self.canvas.create_text(center_x, center_y, text=label, fill="#ffffff", disabledfill=theme_color("disabled_icon"),
                                     font=("Segoe UI", 10, "bold"), tags=tag)
         else:
             icon(center_x, center_y, tag)
@@ -343,7 +340,7 @@ class ResultsTable(ctk.CTkFrame):
 
     def draw_branches(self, row, x, y, width, sync_x):
         if not row.local_path and row.github_url and not row.branches and not row.branch_error:
-            label = self.text(x, y, tr("Клонировать репозиторий"), "#f4f1ff", width)
+            label = self.text(x, y, tr("Клонировать репозиторий"), theme_color("text"), width)
             bottom = self.canvas.bbox(label)[3]
             if self.on_sync is not None:
                 button = self.draw_download(row, None, sync_x, y)
@@ -351,10 +348,10 @@ class ResultsTable(ctk.CTkFrame):
             return bottom
         if row.branch_error or not row.branches:
             can_fix = row.origin_mismatch and self.on_fix_origin is not None
-            color = "#d4baff" if can_fix else BRANCH_COLORS["gray"]
+            color = theme_color("link") if can_fix else theme_color("branch_gray")
             item = self.text(x, y, error_text(row.branch_error) or "—", color, width)
             if can_fix:
-                self.canvas.itemconfigure(item, disabledfill="#9297ac")
+                self.canvas.itemconfigure(item, disabledfill=theme_color("disabled_icon"))
                 self.register_action(item)
                 self.bind_link(item, lambda: self.on_fix_origin(row) if self.actions_enabled else None)
             return self.canvas.bbox(item)[3]
@@ -366,10 +363,10 @@ class ResultsTable(ctk.CTkFrame):
             if branch.status in BRANCH_LABELS:
                 detail, color = BRANCH_LABELS[branch.status]
                 label = f"{label} · {tr(detail)}"
-                foreground = BRANCH_COLORS[color]
+                foreground = theme_color(f"branch_{color}")
                 local = remote = color
             else:
-                foreground = "#f4f1ff"
+                foreground = theme_color("text")
                 local = "yellow" if branch.status == "ahead" else "red"
                 remote = "red" if branch.status == "ahead" else "yellow"
 
@@ -378,11 +375,11 @@ class ResultsTable(ctk.CTkFrame):
                 items.append(self.draw_commit(x + name_width, y, tr("Локально"), branch.local_commit,
                                               local, side_width - 8))
             if not branch.local_commit:
-                items.append(self.text(x + name_width, y, tr("Локально —"), BRANCH_COLORS["gray"]))
+                items.append(self.text(x + name_width, y, tr("Локально —"), theme_color("branch_gray")))
             if branch.status in {"behind", "ahead", "github", "local"}:
                 inbound = branch.status in {"behind", "github"}
                 items.append(self.text(x + name_width + side_width, y, "←" if inbound else "→",
-                                       "#85839e", bold=True))
+                                       theme_color("arrow"), bold=True))
                 if inbound and self.on_sync is not None:
                     items.append(self.draw_download(row, branch, sync_x, y))
             remote_x = x + name_width + side_width + arrow_width
@@ -390,6 +387,6 @@ class ResultsTable(ctk.CTkFrame):
                 items.append(self.draw_commit(remote_x, y, "GitHub", branch.remote_commit,
                                               remote, side_width - 8))
             else:
-                items.append(self.text(remote_x, y, "GitHub —", BRANCH_COLORS["gray"]))
+                items.append(self.text(remote_x, y, "GitHub —", theme_color("branch_gray")))
             y = max(self.canvas.bbox(item)[3] for item in items) + 2
         return y
