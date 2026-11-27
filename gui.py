@@ -13,7 +13,7 @@ import customtkinter as ctk
 
 from branches import BranchError, github_repository
 from localization import LANGUAGES, error_text, set_language, tr
-from comparison_cache import load_cache, profile_cache_path, save_cache
+from comparison_cache import cache_for_profile, load_cache, reconcile_cache, save_cache
 from dialog_position import center_windows_dialog, set_windows_titlebar_theme
 from comparison import compare, delete_local_folder, refresh_repository, validate_login, with_branches
 from git_sync import change_origin, clone_from_github, corrected_origin, read_local_origin, sync_from_github
@@ -340,7 +340,9 @@ class MainWindow(ctk.CTk):
 
 def run():
     try:
-        preferences = load_settings(settings_path())
+        path = settings_path()
+        preferences = load_settings(path)
+        reconcile_cache(path, preferences)
     except (OSError, ValueError):
         preferences = {}
     language = preferences.get("language")
@@ -456,6 +458,10 @@ def run_window(root, language, theme, snapshot=None):
             login.set(profile["login"])
             show_profile_cache()
 
+    def save_preferences(data, renamed=None):
+        save_settings(preferences_path, data)
+        reconcile_cache(preferences_path, data, renamed)
+
     def add_user(name, token):
         nonlocal preferences
         validate_login(name)
@@ -467,7 +473,7 @@ def run_window(root, language, theme, snapshot=None):
         if token:
             data["users"][existing or name]["token"] = token
         if existing is None or token:
-            save_settings(preferences_path, data)
+            save_preferences(data)
         preferences = data
         refresh_choices()
         login.set(existing or name)
@@ -536,10 +542,12 @@ def run_window(root, language, theme, snapshot=None):
                     users[name]["token"] = token
                 else:
                     users[name].pop("token", None)
-                save_settings(preferences_path, data)
+                save_preferences(data)
                 preferences = data
-                if login.get() == original:
+                if login.get() == original and name != original:
                     login.set(name)
+                    if profile_name.get():
+                        show_profile_cache()
                 refresh_choices()
                 refresh(name)
                 status.set(tr('Логин «{name}» сохранён.', name=name))
@@ -568,15 +576,18 @@ def run_window(root, language, theme, snapshot=None):
                 }
                 if data["default_profile"] not in data["profiles"]:
                     data["default_profile"] = None
-                save_settings(preferences_path, data)
+                save_preferences(data)
             except (OSError, ValueError) as error:
                 modal_message(tr('Не удалось удалить пользователя'), str(error), parent=dialog)
                 return
             preferences = data
             if login.get() == name:
                 login.set("")
-            if profile_name.get() not in data["profiles"]:
                 profile_name.set("")
+                show_profile_cache()
+            elif profile_name.get() and profile_name.get() not in data["profiles"]:
+                profile_name.set("")
+                show_profile_cache()
             refresh_choices()
             refresh(login.get())
             status.set(tr('Пользователь «{name}» и его профили удалены.', name=name))
@@ -618,14 +629,21 @@ def run_window(root, language, theme, snapshot=None):
             ):
                 return False
         path = str(Path(folder_path).expanduser().absolute())
+        renamed = None
+        profile = {"folder": path, "login": account}
         if original is not None and original != name:
-            del profiles[original]
-        profiles[name] = {"folder": path, "login": account}
+            previous = profiles.pop(original)
+            if Path(previous["folder"]).expanduser().absolute() == Path(path) and previous["login"] == account:
+                renamed = (
+                    cache_for_profile(preferences_path, original, previous, data["users"]),
+                    cache_for_profile(preferences_path, name, profile, data["users"]),
+                )
+        profiles[name] = profile
         if default:
             data["default_profile"] = name
         elif data["default_profile"] in (name, original):
             data["default_profile"] = None
-        save_settings(preferences_path, data)
+        save_preferences(data, renamed)
         preferences = data
         refresh_choices()
         if original is None or profile_name.get() == original:
@@ -719,13 +737,14 @@ def run_window(root, language, theme, snapshot=None):
                 data["profiles"].pop(name, None)
                 if data["default_profile"] == name:
                     data["default_profile"] = None
-                save_settings(preferences_path, data)
+                save_preferences(data)
             except (OSError, ValueError) as error:
                 modal_message(tr('Не удалось удалить профиль'), str(error), parent=dialog)
                 return
             preferences = data
             if profile_name.get() == name:
                 profile_name.set("")
+                show_profile_cache()
             refresh_choices()
             refresh()
             status.set(tr('Профиль «{name}» удалён.', name=name))
@@ -967,8 +986,7 @@ def run_window(root, language, theme, snapshot=None):
         path = folder.get().strip()
         if not path or Path(path).expanduser().absolute() != Path(profile["folder"]).expanduser().absolute():
             return None
-        authenticated = bool(preferences["users"].get(login.get(), {}).get("token"))
-        return profile_cache_path(preferences_path, name, path, login.get(), authenticated)
+        return cache_for_profile(preferences_path, name, profile, preferences["users"])
 
     def summary_text():
         return "  ·  ".join(f"{tr(label)}: {counts[key]}" for key, label in STATUSES.items())
@@ -995,7 +1013,7 @@ def run_window(root, language, theme, snapshot=None):
         status.set(summary_text())
 
     def remember_table():
-        if active_cache is None:
+        if active_cache is None or active_cache != selected_cache_path():
             return ""
         try:
             save_cache(active_cache, all_rows.values())

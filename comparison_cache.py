@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from dataclasses import asdict
 from pathlib import Path
 
@@ -12,6 +13,44 @@ def profile_cache_path(settings_file, name, folder, login, authenticated):
     identity = json.dumps([name, str(Path(folder).expanduser().absolute()), login.casefold(), authenticated])
     key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
     return settings_file.parent.parent / "cache" / f"{key}.json"
+
+
+def cache_for_profile(settings_file, name, profile, users):
+    login = profile["login"]
+    authenticated = bool(users.get(login, {}).get("token"))
+    return profile_cache_path(settings_file, name, profile["folder"], login, authenticated)
+
+
+def reconcile_cache(settings_file, preferences, renamed=None):
+    directory = settings_file.parent.parent / "cache"
+    try:
+        if directory.is_symlink() or directory.is_junction():
+            return
+        files = list(directory.iterdir())
+    except OSError:
+        return
+
+    used = {
+        cache_for_profile(settings_file, name, profile, preferences["users"])
+        for name, profile in preferences["profiles"].items()
+    }
+    if renamed is not None:
+        old, new = renamed
+        if old in files and old not in used and new in used and not old.is_symlink() and old.is_file():
+            try:
+                if not new.exists() or new.stat().st_mtime_ns < old.stat().st_mtime_ns:
+                    old.replace(new)
+            except OSError:
+                used.add(old)
+
+    for file in files:
+        if file in used or not re.fullmatch(r"[0-9a-f]{64}\.json", file.name):
+            continue
+        try:
+            if file.is_file() and not file.is_symlink():
+                file.unlink(missing_ok=True)
+        except OSError:
+            continue
 
 
 def load_cache(path):
