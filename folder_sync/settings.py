@@ -4,7 +4,41 @@ import os
 import re
 import sys
 from pathlib import Path
+from shutil import copyfileobj
 from tempfile import NamedTemporaryFile
+
+
+def fallback_settings_path():
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        return Path(local_app_data) / "GitHubFolderSync" / "settings" / "settings.json"
+    return None
+
+
+def copy_if_newer(source, destination):
+    try:
+        source_file = source.open("rb")
+    except FileNotFoundError:
+        return
+
+    with source_file:
+        source_stat = os.fstat(source_file.fileno())
+        try:
+            if destination.stat().st_mtime_ns >= source_stat.st_mtime_ns:
+                return
+        except FileNotFoundError:
+            pass
+
+        temporary = None
+        try:
+            with NamedTemporaryFile(dir=destination.parent, suffix=".tmp", delete=False) as output:
+                temporary = Path(output.name)
+                copyfileobj(source_file, output)
+            os.utime(temporary, ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns))
+            temporary.replace(destination)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
 
 def settings_path():
@@ -13,10 +47,9 @@ def settings_path():
     else:
         directory = Path(__file__).resolve().parents[1]
     portable = directory / "settings" / "settings.json"
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if not local_app_data:
+    fallback = fallback_settings_path()
+    if fallback is None or fallback == portable:
         return portable
-    fallback = Path(local_app_data) / "GitHubFolderSync" / "settings" / "settings.json"
 
     try:
         for data_directory in (portable.parent, directory / "cache"):
@@ -26,6 +59,11 @@ def settings_path():
     except OSError as error:
         if isinstance(error, PermissionError) or error.errno == errno.EROFS:
             return fallback
+        return portable
+    try:
+        copy_if_newer(fallback, portable)
+    except OSError:
+        return fallback
     return portable
 
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .branches import Branch
 from .comparison import Match
-from .settings import save_settings
+from .settings import copy_if_newer, fallback_settings_path, save_settings
 
 
 def profile_cache_path(settings_file, name, folder, login, authenticated):
@@ -19,6 +19,20 @@ def cache_for_profile(settings_file, name, profile, users):
     login = profile["login"]
     authenticated = bool(users.get(login, {}).get("token"))
     return profile_cache_path(settings_file, name, profile["folder"], login, authenticated)
+
+
+def restore_newer_cache(settings_file, preferences):
+    fallback = fallback_settings_path()
+    if fallback is None or fallback == settings_file:
+        return
+
+    for name, profile in preferences["profiles"].items():
+        destination = cache_for_profile(settings_file, name, profile, preferences["users"])
+        source = fallback.parent.parent / "cache" / destination.name
+        try:
+            copy_if_newer(source, destination)
+        except OSError:
+            continue
 
 
 def reconcile_cache(settings_file, preferences, renamed=None):
