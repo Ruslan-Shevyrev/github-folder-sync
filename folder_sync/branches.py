@@ -18,6 +18,10 @@ class BranchError(Exception):
     pass
 
 
+GIT_NOT_INSTALLED = "Для проверки веток установите Git."
+NO_LOCAL_REPOSITORY = "В локальной папке нет Git-репозитория."
+
+
 class OriginMismatch(BranchError):
     message = "Origin ведёт на другой репозиторий."
 
@@ -39,7 +43,7 @@ def git(path, *args, allowed=(0,), input_text=None, timeout=20, extra_env=None):
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except FileNotFoundError as error:
-        raise BranchError("Для проверки веток установите Git.") from error
+        raise BranchError(GIT_NOT_INSTALLED) from error
     except subprocess.TimeoutExpired as error:
         raise BranchError("Истекло время ожидания ответа Git.") from error
     except OSError as error:
@@ -99,9 +103,7 @@ def compare_branches(path, url, token=""):
     local = {}
     if path:
         if not (Path(path) / ".git").exists():
-            if url:
-                raise BranchError("В локальной папке нет Git-репозитория.")
-            return ()
+            raise BranchError(NO_LOCAL_REPOSITORY)
         if url:
             origin = git(path, "config", "--get", "remote.origin.url", allowed=(0, 1)).stdout.strip()
             if not origin:

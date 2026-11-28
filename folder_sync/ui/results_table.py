@@ -4,6 +4,8 @@ import webbrowser
 from pathlib import Path
 import customtkinter as ctk
 
+from ..branches import GIT_NOT_INSTALLED, NO_LOCAL_REPOSITORY
+from ..comparison import repository_name
 from .app_theme import theme_color
 from .localization import error_text, tr
 
@@ -85,7 +87,7 @@ class ResultsTable(ctk.CTkFrame):
         theme = ctk.get_appearance_mode().lower()
         self.branch_icons = {
             name: tk.PhotoImage(master=self.canvas, file=directory / f"branch-{name}-{theme}.png")
-            for name in ("branch", "match", "warning", "unknown")
+            for name in ("branch", "match", "warning", "unknown", "error")
         }
         self.status_icons = {
             key: tk.PhotoImage(master=self.canvas, file=directory / f"status-{key}-{theme}.png")
@@ -258,7 +260,7 @@ class ResultsTable(ctk.CTkFrame):
         values = {"number": str(number), "name": row.name, "status": tr(label),
                   "visibility": row.visibility.capitalize() if row.github_url else "",
                   "path": row.local_path, "github": row.github_url.removeprefix("https://github.com/")}
-        sync_buttons = []
+        sync_slots = []
         refresh_cell = None
         sync_x = 0
         for column, _, width in self.columns:
@@ -275,7 +277,7 @@ class ResultsTable(ctk.CTkFrame):
                                  hint=tr("button.delete"))
                 cell = f"button-{button}"
             elif column == "branches":
-                bottom = max(bottom, self.draw_branches(row, x + 8, top + 6, sync_x, sync_buttons) + 6)
+                bottom = max(bottom, self.draw_branches(row, x + 8, top + 6, sync_x, sync_slots) + 6)
             elif column == "status":
                 item = self.text(x + 29, top + 6, value, foreground)
                 _, upper, right, lower = self.canvas.bbox(item)
@@ -306,13 +308,15 @@ class ResultsTable(ctk.CTkFrame):
                 centered_cells.append(cell)
             x += width
             edges.append(x)
-        if len(sync_buttons) == 1:
-            centered_cells.append(f"button-{sync_buttons[0]}")
-        elif sync_buttons and refresh_cell:
+        if len(sync_slots) == 1:
+            cell, _ = sync_slots[0]
+            if cell is not None:
+                centered_cells.append(cell)
+        elif sync_slots and refresh_cell:
             centered_cells.remove(refresh_cell)
-            first_middle = sync_buttons[(len(sync_buttons) - 1) // 2]
-            last_middle = sync_buttons[len(sync_buttons) // 2]
-            middle_y = (self.canvas.bbox(first_middle)[1] + self.canvas.bbox(last_middle)[1]) // 2
+            _, first_y = sync_slots[(len(sync_slots) - 1) // 2]
+            _, last_y = sync_slots[len(sync_slots) // 2]
+            middle_y = (first_y + last_y) // 2
             self.canvas.move(refresh_cell, 0, middle_y - self.canvas.bbox(refresh_cell)[1])
         for cell in centered_cells:
             _, upper, _, lower = self.canvas.bbox(cell)
@@ -446,7 +450,7 @@ class ResultsTable(ctk.CTkFrame):
             hint += tr("branch.line", branch_name=branch.name)
         return self.draw_button(x, y, "download", lambda: self.on_sync(row, branch), hint=hint)
 
-    def draw_branches(self, row, x, y, sync_x, sync_buttons):
+    def draw_branches(self, row, x, y, sync_x, sync_slots):
         # Measure the actual unwrapped items, including icons, arrows and both cell margins.
         right = x
         def bounds(item):
@@ -461,18 +465,36 @@ class ResultsTable(ctk.CTkFrame):
             bottom = bounds(label)[1]
             if self.on_sync is not None:
                 button = self.draw_download(row, None, sync_x, y)
-                sync_buttons.append(button)
+                sync_slots.append((f"button-{button}", y))
                 bottom = max(bottom, self.canvas.bbox(button)[3])
             return bottom
         if row.branch_error or not row.branches:
+            if row.branch_error in (GIT_NOT_INSTALLED, NO_LOCAL_REPOSITORY):
+                self.canvas.create_image(x, y + 2, anchor="nw", image=self.branch_icons["error"])
+                key = "branch.repository_missing" if row.branch_error == NO_LOCAL_REPOSITORY else "error.git_missing"
+                label = self.text(x + 21, y, tr(key), theme_color("branch_gray"))
+                self.bind_item(label, label, "<Enter>", lambda _: self.show_tooltip(label, error_text(row.branch_error)))
+                self.bind_item(label, label, "<Leave>", self.hide_tooltip)
+                return max(y + 18, bounds(label)[1])
             can_fix = row.origin_mismatch and self.on_fix_origin is not None
             color = theme_color("link") if can_fix else theme_color("branch_gray")
             item = self.text(x, y, error_text(row.branch_error) or "—", color)
+            if row.origin_mismatch:
+                center = sync_x + BUTTON_SIZE // 2
+                arrow = self.canvas.create_line(center, y, center, y + 15, arrow=tk.LAST,
+                                                arrowshape=(6, 7, 3), width=2, fill=theme_color("disabled_icon"),
+                                                state="disabled")
+                sync_slots.append((arrow, y))
             if can_fix:
                 self.canvas.itemconfigure(item, disabledfill=theme_color("disabled_icon"))
                 self.register_action(item)
                 self.bind_link(item, lambda: self.on_fix_origin(row) if self.actions_enabled else None)
-            return bounds(item)[1]
+            bottom = bounds(item)[1]
+            if row.origin_mismatch:
+                local_name = row.origin_name or tr("origin.name_unknown")
+                detail = tr("origin.names", local=local_name, target=repository_name(row.github_url))
+                bottom = bounds(self.text(x, bottom + 2, detail, theme_color("muted")))[1]
+            return bottom
         for branch in row.branches:
             detail, color = BRANCH_LABELS.get(branch.status, BRANCH_LABELS["unknown"])
             branch_top = y
@@ -505,11 +527,11 @@ class ResultsTable(ctk.CTkFrame):
             else:
                 items.append(self.text(remote_x, y, "GitHub", theme_color("branch_gray")))
             branch_bottom = max(bounds(item)[1] for item in items)
-            button_y = (branch_top + branch_bottom - BUTTON_SIZE) / 2
+            button_y = round((branch_top + branch_bottom - BUTTON_SIZE) / 2)
+            cell = None
             if branch.status in {"behind", "github"} and self.on_sync is not None:
                 button = self.draw_download(row, branch, sync_x, button_y)
-            else:
-                button = self.draw_button(sync_x, button_y, "download")
-            sync_buttons.append(button)
+                cell = f"button-{button}"
+            sync_slots.append((cell, button_y))
             y = branch_bottom + 5
         return y

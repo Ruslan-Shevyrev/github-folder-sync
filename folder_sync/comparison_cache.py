@@ -4,7 +4,7 @@ import re
 from dataclasses import asdict
 from pathlib import Path
 
-from .branches import Branch
+from .branches import Branch, NO_LOCAL_REPOSITORY
 from .comparison import Match
 from .settings import copy_if_newer, fallback_settings_path, portable_settings_path, save_settings
 
@@ -92,6 +92,7 @@ def load_cache(path):
         for row in data["rows"]:
             branches = row["branches"]
             values = {key: row[key] for key in ("name", "local_path", "github_url", "branch_error", "visibility")}
+            values["origin_name"] = row.get("origin_name", "")
             if not all(isinstance(value, str) for value in values.values()):
                 return None
             if not isinstance(branches, list) or not all(
@@ -99,6 +100,11 @@ def load_cache(path):
                 for branch in branches
             ):
                 return None
+            # Older snapshots used an empty branch list for local folders without Git.
+            if not branches and not values["branch_error"] and values["local_path"] and not values["github_url"]:
+                folder = Path(values["local_path"])
+                if folder.is_dir() and not (folder / ".git").exists():
+                    values["branch_error"] = NO_LOCAL_REPOSITORY
             rows.append(Match(**values, branches=tuple(Branch(**branch) for branch in branches)))
         return rows
     except (OSError, ValueError, TypeError, KeyError):
@@ -106,10 +112,4 @@ def load_cache(path):
 
 
 def save_cache(path, rows):
-    records = []
-    for row in rows:
-        record = asdict(row)
-        # Origin URLs can contain credentials and are only needed for live actions.
-        record.pop("mismatched_origin")
-        records.append(record)
-    save_settings(path, {"version": 1, "rows": records})
+    save_settings(path, {"version": 1, "rows": [asdict(row) for row in rows]})

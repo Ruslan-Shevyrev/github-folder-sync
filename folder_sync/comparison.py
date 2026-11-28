@@ -6,10 +6,22 @@ import stat
 from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
 
 from .branches import Branch, BranchError, OriginMismatch, compare_branches
+
+
+def repository_name(remote):
+    if "://" in remote:
+        try:
+            path = urlsplit(remote).path
+        except ValueError:
+            return ""
+    else:
+        # Git accepts both local paths and SSH remotes in host:path form.
+        path = remote.split("?", 1)[0].split("#", 1)[0].split(":", 1)[-1]
+    return path.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
 
 
 @dataclass(frozen=True)
@@ -19,7 +31,7 @@ class Match:
     github_url: str = ""
     branches: tuple[Branch, ...] = ()
     branch_error: str = ""
-    mismatched_origin: str = ""
+    origin_name: str = ""
     visibility: str = ""
 
     @property
@@ -160,8 +172,8 @@ def compare(folder, login, token=""):
 def with_branches(row, token=""):
     try:
         return replace(row, branches=compare_branches(row.local_path, row.github_url, token),
-                       branch_error="", mismatched_origin="")
+                       branch_error="", origin_name="")
     except OriginMismatch as error:
-        return replace(row, branches=(), branch_error=str(error), mismatched_origin=error.origin)
+        return replace(row, branches=(), branch_error=str(error), origin_name=repository_name(error.origin))
     except BranchError as error:
-        return replace(row, branches=(), branch_error=str(error), mismatched_origin="")
+        return replace(row, branches=(), branch_error=str(error), origin_name="")

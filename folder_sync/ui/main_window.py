@@ -322,7 +322,7 @@ def run_window(root, language, theme, preferences_path, snapshot=None):
                     candidate = Path(base_path).expanduser().absolute() / row.name
                     local_path = str(candidate) if candidate.is_dir() else ""
                     updated = replace(row, local_path=local_path, branches=(),
-                                      branch_error="Не удалось перепроверить ветки.", mismatched_origin="")
+                                      branch_error="Не удалось перепроверить ветки.", origin_name="")
                     if not updated.local_path and not updated.github_url:
                         updated = None
             results.put(("row_updated", (row, updated, "\n".join(errors))))
