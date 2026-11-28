@@ -25,7 +25,7 @@ try {
         $settingsBackup = [IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $settingsFile))
     }
 
-    & $venvPython -m PyInstaller --onedir --windowed --noconfirm --name GitHubFolderSync --specpath build --collect-data customtkinter --icon (Join-Path $PSScriptRoot 'assets\sync-icon.ico') --add-data ((Join-Path $PSScriptRoot 'assets\sync-icon.png') + ':assets') github_folder_sync.py
+    & $venvPython -m PyInstaller --onedir --windowed --noconfirm --name GitHubFolderSync --specpath build --collect-data customtkinter --icon (Join-Path $PSScriptRoot 'assets\sync-icon.ico') --add-data ((Join-Path $PSScriptRoot 'assets\sync-icon.png') + ':assets') --add-data ((Join-Path $PSScriptRoot 'assets\icons') + ':assets/icons') github_folder_sync.py
     if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed.' }
 
     Write-Host 'Application: dist\GitHubFolderSync\GitHubFolderSync.exe'

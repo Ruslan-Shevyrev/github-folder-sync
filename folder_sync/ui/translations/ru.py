@@ -3,7 +3,7 @@
 NAME = 'Русский'
 
 MESSAGES = {
-    "status.both": 'Есть в обоих местах',
+    "status.both": 'В обоих местах',
     "status.github_only": 'Только на GitHub',
     "status.local_only": 'Только локально',
     "button.cancel": 'Отмена',
@@ -96,10 +96,12 @@ MESSAGES = {
     "appearance.language": 'Язык',
     "column.name": 'Название',
     "column.status": 'Статус',
-    "column.visibility": 'Видимость',
+    "column.visibility": 'Доступ',
     "column.branches": 'Ветки',
     "column.local_path": 'Локальный путь',
-    "column.github_url": 'Ссылка на GitHub',
+    "column.github_url": 'GitHub',
+    "branch.local_behind": "Локальная ветка отстаёт",
+    "branch.github_behind": "GitHub отстаёт",
     "branch.equal": 'совпадает',
     "branch.local_only": 'только локально',
     "branch.github_only": 'только на GitHub',
@@ -107,7 +109,6 @@ MESSAGES = {
     "branch.incomplete": 'неполная история',
     "branch.fetch_hint": 'git fetch — создать локальную ветку',
     "branch.local_commit": 'Локально',
-    "branch.no_local_commit": 'Локально —',
     "error.invalid_token_reference": 'Введите токен GitHub или ссылку вида v{VARIABLE_NAME}.',
     "error.env_missing": 'Переменная окружения «{name}» не задана или пуста.',
     "error.env_invalid": 'Переменная окружения «{name}» содержит недопустимое значение токена.',

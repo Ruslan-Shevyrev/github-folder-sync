@@ -4,7 +4,7 @@ THEMES = ("Dark", "Light")
 WHITE = "#ffffff"
 
 DARK = {
-    "background": "#111522",
+    "background": "#171923",
     "panel": "#191e2f",
     "field": "#23283c",
     "border": "#42495f",
@@ -14,15 +14,15 @@ DARK = {
     "disabled_text": "#9398ad",
     "accent": "#7446ee",
     "accent_hover": "#895dff",
-    "row_action": "#7446ee",
-    "row_action_hover": "#865cff",
+    "row_action": "#373d4b",
+    "row_action_hover": "#485165",
     "row_action_icon": WHITE,
     "delete_icon": WHITE,
     "hover": "#353d55",
     "table_frame": "#101421",
-    "table": "#101321",
-    "table_border": "#343956",
-    "header": "#222740",
+    "table": "#1c1e28",
+    "table_border": "#404250",
+    "header": "#272935",
     "header_hover": "#343052",
     "header_pressed": "#4a347a",
     "selection": "#513ca0",
@@ -38,12 +38,12 @@ DARK = {
     "branch_yellow": "#ffe08a",
     "branch_red": "#ff999f",
     "branch_gray": "#c3c6d2",
-    "both_bg": "#20372f",
+    "both_bg": "#184632",
     "both_fg": "#b8f5cf",
-    "github_bg": "#2e3242",
+    "github_bg": "#353047",
     "github_fg": "#dcdfeb",
-    "local_bg": "#432b37",
-    "local_fg": "#ffc4cb",
+    "local_bg": "#353846",
+    "local_fg": "#ecebf2",
 }
 
 LIGHT = {
@@ -85,8 +85,8 @@ LIGHT = {
     "both_fg": "#23543a",
     "github_bg": "#eaeffa",
     "github_fg": "#34486e",
-    "local_bg": "#fbe9ed",
-    "local_fg": "#7e3047",
+    "local_bg": "#e9ecf2",
+    "local_fg": "#414b60",
 }
 
 _palette = DARK

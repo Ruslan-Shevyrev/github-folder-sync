@@ -122,12 +122,12 @@ def run_window(root, language, theme, preferences_path, snapshot=None):
         next_window = (new_language, new_theme, {
             "folder": folder.get(), "login": login.get(), "profile": profile_name.get(),
             "only_problems": only_problems.get(), "rows": list(all_rows.values()),
-            "cached": from_cache, "compared": compared, "cache": active_cache,
+            "expanded": expanded, "cached": from_cache, "compared": compared, "cache": active_cache,
         })
         root.quit()
 
-    panel = ctk.CTkFrame(root, fg_color=theme_color("panel"), corner_radius=12, border_width=1, border_color=theme_color("panel_border"))
-    panel.pack(fill="both", expand=True, padx=12, pady=12)
+    panel = ctk.CTkFrame(root, fg_color=theme_color("background"), corner_radius=0)
+    panel.pack(fill="both", expand=True)
     panel.grid_propagate(False)
     panel.columnconfigure(1, weight=1)
     panel.rowconfigure(6, weight=1)
@@ -136,7 +136,7 @@ def run_window(root, language, theme, preferences_path, snapshot=None):
     language_display = tk.StringVar(master=root, value=LANGUAGES[language])
     language_codes = {label: code for code, label in LANGUAGES.items()}
     language_picker = combo_widget(
-        appearance, variable=language_display, values=list(language_codes), width=135,
+        appearance, variable=language_display, values=list(language_codes), width=96,
         command=lambda chosen: switch_appearance("language", language_codes[chosen]),
     )
     language_picker.pack(side="left")
@@ -144,20 +144,51 @@ def run_window(root, language, theme, preferences_path, snapshot=None):
     theme_picker = combo_widget(appearance, variable=theme_display, values=list(THEMES), width=105,
                                 command=lambda chosen: switch_appearance("theme", chosen))
     theme_picker.pack(side="left", padx=(8, 0))
-    label_widget(panel, text=tr("window.heading"), heading=True).grid(
-        row=0, column=0, columnspan=3, sticky="w", padx=(16, 0), pady=(14, 12)
+    ctk.CTkLabel(panel, text=tr("window.heading"), font=("Segoe UI", 32, "bold"),
+                 text_color=theme_color("text")).grid(
+        row=0, column=0, columnspan=2, sticky="w", padx=(20, 0), pady=(16, 18)
     )
-    label_widget(panel, text=tr("user.github")).grid(row=1, column=0, sticky="w", padx=(16, 4))
-    login_input = combo_widget(panel, variable=login, values=[])
+    profile_bar = ctk.CTkFrame(panel, fg_color=theme_color("field"), corner_radius=9,
+                              border_width=1, border_color=theme_color("border"))
+    profile_bar.grid(row=1, column=0, columnspan=3, sticky="ew", padx=16)
+    details = ctk.CTkFrame(panel, fg_color="transparent")
+    details.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+    details.columnconfigure(1, weight=1)
+    expanded = snapshot["expanded"] if snapshot else not preferences.get("default_profile")
+
+    def update_summary(*_):
+        selection = " · ".join(filter(None, (profile_name.get(), login.get())))
+        title = tr("profile.label")
+        disclosure.configure(text=("▾  " if expanded else "▸  ") + title + (f": {selection}" if selection else ""))
+
+    def toggle_details():
+        nonlocal expanded
+        expanded = not expanded
+        if expanded:
+            details.grid()
+        else:
+            details.grid_remove()
+        update_summary()
+
+    disclosure = button_widget(profile_bar, text="", command=toggle_details)
+    disclosure.configure(anchor="w", font=("Segoe UI", 16), height=40, fg_color="transparent", border_width=0)
+    disclosure.pack(side="left", fill="x", expand=True, padx=6, pady=4)
+    if not expanded:
+        details.grid_remove()
+    update_summary()
+    summary_traces = [(var, var.trace_add("write", update_summary)) for var in (profile_name, login)]
+
+    label_widget(details, text=tr("user.github")).grid(row=1, column=0, sticky="w", padx=(16, 4))
+    login_input = combo_widget(details, variable=login, values=[])
     login_input.grid(row=1, column=1, sticky="ew", padx=8)
-    label_widget(panel, text=tr("folder.local")).grid(row=2, column=0, sticky="w", padx=(16, 4))
-    folder_input = entry_widget(panel, textvariable=folder)
+    label_widget(details, text=tr("folder.local")).grid(row=2, column=0, sticky="w", padx=(16, 4))
+    folder_input = entry_widget(details, textvariable=folder)
     folder_input.grid(row=2, column=1, sticky="ew", padx=8, pady=8)
     if root.tk.call("tk", "windowingsystem") == "win32":
         folder_input.bind("<Control-KeyPress>", edit_shortcut_on_windows)
 
-    label_widget(panel, text=tr("profile.label")).grid(row=3, column=0, sticky="w", padx=(16, 4))
-    profile_input = combo_widget(panel, variable=profile_name, values=[])
+    label_widget(details, text=tr("profile.label")).grid(row=3, column=0, sticky="w", padx=(16, 4))
+    profile_input = combo_widget(details, variable=profile_name, values=[])
     profile_input.grid(row=3, column=1, sticky="ew", padx=8)
 
     def refresh_choices():
@@ -210,13 +241,13 @@ def run_window(root, language, theme, preferences_path, snapshot=None):
                 show_profile_cache()
             status.set(tr("profile.deleted", name=original))
 
-    add_button = button_widget(panel, text=tr("user.add"), command=lambda: add_user(root, preferences_path, users_changed))
+    add_button = button_widget(details, text=tr("user.add"), command=lambda: add_user(root, preferences_path, users_changed))
     add_button.grid(row=1, column=2, sticky="ew", padx=(0, 16))
-    save_button = button_widget(panel, text=tr("button.save_profile"), command=lambda: add_profile(
+    save_button = button_widget(details, text=tr("button.save_profile"), command=lambda: add_profile(
         root, preferences_path, folder.get().strip(), login.get(), profiles_changed
     ))
     save_button.grid(row=3, column=2, sticky="ew", padx=(0, 16))
-    navigation = ctk.CTkFrame(panel, fg_color="transparent")
+    navigation = ctk.CTkFrame(details, fg_color="transparent")
     navigation.grid(row=4, column=1, sticky="e", padx=8, pady=(8, 0))
     users_button = button_widget(navigation, text=tr("user.view"), command=lambda: open_users(
         root, preferences_path, login.get(), users_changed
@@ -234,7 +265,7 @@ def run_window(root, language, theme, preferences_path, snapshot=None):
         if selected:
             folder.set(selected)
 
-    browse = button_widget(panel, text=tr("button.browse"), command=choose_folder)
+    browse = button_widget(details, text=tr("button.browse"), command=choose_folder)
     browse.grid(row=2, column=2, sticky="ew", padx=(0, 16))
 
     def current_token():
@@ -378,7 +409,7 @@ def run_window(root, language, theme, preferences_path, snapshot=None):
     table = ResultsTable(panel, on_sync=request_sync, on_refresh=request_refresh, on_delete=request_delete,
                          on_fix_origin=request_fix_origin, on_open_folder=open_local_folder)
     table.grid(row=6, column=0, columnspan=3, sticky="nsew", padx=16)
-    status_line = ctk.CTkFrame(panel, fg_color="transparent")
+    status_line = ctk.CTkFrame(panel, fg_color=theme_color("field"), border_color=theme_color("border"), border_width=1)
     status_line.grid(row=7, column=0, columnspan=3, sticky="ew", padx=16, pady=(8, 12))
     status_line.columnconfigure(0, weight=1)
     label_widget(status_line, textvariable=status, muted=True, wraplength=680).grid(
@@ -393,7 +424,7 @@ def run_window(root, language, theme, preferences_path, snapshot=None):
     loader_group.grid_remove()
 
     table_notes = ctk.CTkFrame(panel, fg_color="transparent")
-    table_notes.grid(row=5, column=0, columnspan=3, sticky="ew", padx=16, pady=(5, 5))
+    table_notes.grid(row=5, column=0, columnspan=3, sticky="ew", padx=16, pady=(14, 14))
     cache_notice = label_widget(table_notes, text=tr("cache.notice"), muted=True)
     cache_notice.configure(text_color=theme_color("branch_red"))
     cache_notice.grid(row=0, column=1, sticky="w", padx=(12, 0))
@@ -545,9 +576,9 @@ def run_window(root, language, theme, preferences_path, snapshot=None):
         Thread(target=load, args=(path, account, token), daemon=True).start()
         root.after(75, show_results)
 
-    button = button_widget(panel, text=tr("button.compare"), primary=True, command=submit)
-    button.grid(row=4, column=2, sticky="ew", padx=(0, 16), pady=(8, 0))
-    controls = (folder_input, login_input, profile_input, browse, add_button, save_button,
+    button = button_widget(profile_bar, text=tr("button.compare"), primary=True, command=submit)
+    button.pack(side="right", padx=8, pady=6)
+    controls = (disclosure, folder_input, login_input, profile_input, browse, add_button, save_button,
                 profiles_button, users_button, problem_filter, language_picker, theme_picker, button)
     if snapshot is not None:
         folder.set(snapshot["folder"])
@@ -567,7 +598,8 @@ def run_window(root, language, theme, preferences_path, snapshot=None):
         profile_name.set(preferences["default_profile"])
         apply_profile()
     root.bind("<Return>", lambda _event: submit())
-    login_input.focus_set()
+    if expanded:
+        login_input.focus_set()
     if snapshot is None and root.tk.call("tk", "windowingsystem") == "win32":
         def maximize_on_map(event):
             if event.widget is root:
@@ -577,6 +609,8 @@ def run_window(root, language, theme, preferences_path, snapshot=None):
         # CustomTkinter restores the window while setting up the Windows title bar.
         startup_binding = root.bind("<Map>", maximize_on_map, add="+")
     root.mainloop()
+    for variable, trace in summary_traces:
+        variable.trace_remove("write", trace)
     if next_window is not None:
         panel.destroy()
     return next_window
