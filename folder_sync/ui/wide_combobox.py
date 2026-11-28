@@ -1,12 +1,36 @@
 import tkinter as tk
+from pathlib import Path
 
 import customtkinter as ctk
 
 
 class WideComboBox(ctk.CTkComboBox):
+    def __init__(self, *args, **kwargs):
+        self._chevron_images = {}
+        self._chevron_item = None
+        super().__init__(*args, **kwargs)
+
+    def _draw(self, no_color_updates=False):
+        super()._draw(no_color_updates)
+        self._canvas.itemconfigure("dropdown_arrow", state="hidden")
+        variant = "disabled" if self._state == tk.DISABLED else self._get_appearance_mode()
+        size = 24 if self._apply_widget_scaling(16) >= 20 else 16
+        key = (variant, size)
+        if key not in self._chevron_images:
+            path = Path(__file__).resolve().parents[2] / "assets" / "icons" / f"chevron-{variant}-{size}.png"
+            self._chevron_images[key] = tk.PhotoImage(master=self._canvas, file=path)
+        x = round(self._apply_widget_scaling(self._current_width - self._current_height / 2))
+        y = round(self._apply_widget_scaling(self._current_height / 2))
+        if self._chevron_item is None:
+            # Use the same hover and click bindings as the rest of the dropdown button.
+            self._chevron_item = self._canvas.create_image(x, y, tags=("right_parts",))
+        self._canvas.coords(self._chevron_item, x, y)
+        self._canvas.itemconfigure(self._chevron_item, image=self._chevron_images[key])
+        self._canvas.tag_raise(self._chevron_item)
+
     def _open_dropdown_menu(self):
         values = self.cget("values")
-        if not values:
+        if self._state == tk.DISABLED or not values:
             return
 
         previous_grab = self.grab_current()
