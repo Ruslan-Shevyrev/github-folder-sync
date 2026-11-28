@@ -2,11 +2,16 @@
 
 [Читать на русском](README.ru.md)
 
-A Windows desktop utility for comparing local project folders with GitHub repositories. See which repositories exist locally or on GitHub, compare branch commits, and pull or clone from the same table.
+A desktop utility for Windows and Linux for comparing local project folders with GitHub repositories. See which repositories exist locally or on GitHub, compare branch commits, and pull or clone from the same table.
 
 ## Download and run
 
-When a release is available, download `GitHubFolderSync-{VERSION}-windows-x64.zip` from [GitHub Releases](https://github.com/Ruslan-Shevyrev/github-folder-sync/releases). Extract the entire archive and open `GitHubFolderSync.exe`. The portable build runs without a separate Python installation. Install Git and make sure it is in `PATH` to check branches and run Git operations.
+Download the archive for your platform from [GitHub Releases](https://github.com/Ruslan-Shevyrev/github-folder-sync/releases) and extract it fully.
+
+- **Windows x64** — extract `GitHubFolderSync-{VERSION}-windows-x64.zip` and open `GitHubFolderSync.exe`.
+- **Linux x86-64** — extract `GitHubFolderSync-{VERSION}-linux-x86_64.tar.gz` with `tar -xzf` and run `./GitHubFolderSync/GitHubFolderSync` from the extraction directory in a desktop session. Opening local paths uses `xdg-open`.
+
+The portable builds include Python. Install Git and make sure it is in `PATH` to check branches and run Git operations.
 
 ## How to use
 
@@ -22,28 +27,38 @@ The top-right menus switch between Russian and English and between **Dark** and 
 - **Green** means the branch points to the same commit on both sides. **Red** marks the side that is behind. **Yellow** marks the side that is ahead or the only side with the branch. **Gray** marks diverged branches or an incomplete history.
 - **↻** refreshes one row. **↓** clones a missing repository, creates a missing local branch, or pulls into a local branch that is behind. Pull uses `git pull --ff-only` and requires the target branch to be checked out with a clean working tree. The arrows in the branch column indicate direction.
 - **Trash** deletes the local folder and its contents permanently after confirmation.
-- Click a local path to open it in File Explorer or a GitHub URL to open it in your browser. If Git reports that `origin` points to another repository, click the message to review the current URL and confirm the correction.
+- Click a local path to open it in the system file manager or a GitHub URL to open it in your browser. If Git reports that `origin` points to another repository, click the message to review the current URL and confirm the correction.
 
 ## Private repositories
 
 Public repositories are available without a token. To access private repositories, add a fine-grained GitHub personal access token to the saved user. Give it access to the relevant repositories and **Contents: Read** for checking branches, cloning, and pulling.
 
-Enter the token directly or use `v{VARIABLE_NAME}` to read it from a Windows environment variable. A directly entered token is stored as plain text in the local settings file. The variable option stores only the reference. Profiles that select the same user share that user's token.
+Enter the token directly or use `v{VARIABLE_NAME}` to read it from an environment variable. A directly entered token is stored as plain text in the local settings file. The variable option stores only the reference. Profiles that select the same user share that user's token.
 
 ## Settings and cache
 
-The app stores settings in `settings/settings.json` and the last comparison for each profile in `cache/`, next to the EXE or in the project root when running from source. If the app cannot write there, it uses the same subfolders under `%LOCALAPPDATA%\GitHubFolderSync`. Git ignores both folders in the project.
+The app stores settings in `settings/settings.json` and the last comparison for each profile in `cache/`, next to the executable or in the project root when running from source. If the app cannot write there, it uses the same subfolders under `%LOCALAPPDATA%\GitHubFolderSync` on Windows or `$XDG_DATA_HOME/GitHubFolderSync` on Linux. The default Linux location is `~/.local/share/GitHubFolderSync`. Git ignores both folders in the project.
 
 Selecting a profile with a saved result opens its table immediately and shows **Cached results** above it. Click **Compare** for fresh results. The **Needs attention** filter works on the loaded table without contacting GitHub.
 
 ## Run from source
 
-Run these commands from the project root in PowerShell with Python 3.13.
+Run the commands for your platform from the project root with Python 3.13 or newer and Tkinter.
+
+### Windows
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe github_folder_sync.py
+```
+
+### Linux
+
+```bash
+python3 -m venv .venv
+./.venv/bin/python -m pip install -r requirements.txt
+./.venv/bin/python github_folder_sync.py
 ```
 
 The interface uses CustomTkinter. The app calls the system Git for branch comparisons and repository operations.
@@ -63,7 +78,17 @@ To build a ZIP for distribution, run:
 powershell -ExecutionPolicy Bypass -File .\build.ps1 -Zip -Version v{VERSION}
 ```
 
-This creates `distGitHubFolderSync-v{VERSION}-windows-x64.zip`.
+This creates `dist/GitHubFolderSync-v{VERSION}-windows-x64.zip`.
+
+## Build for Linux x86-64
+
+Run the build from the project root on Linux x86-64 with Python 3.13 or newer, Tkinter, and `venv`.
+
+```bash
+bash ./build.sh v{VERSION}
+```
+
+The script installs dependencies in `.venv` and creates `dist/GitHubFolderSync-v{VERSION}-linux-x86_64.tar.gz`. Run `bash ./build.sh` to use `local` as the version.
 
 <table>
 	<tr>

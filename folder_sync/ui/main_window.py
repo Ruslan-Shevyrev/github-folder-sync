@@ -1,5 +1,7 @@
 import os
 import re
+import subprocess
+import sys
 import tkinter as tk
 import webbrowser
 from collections import Counter
@@ -401,6 +403,8 @@ def run_window(root, language, theme, preferences_path, snapshot=None):
                 raise FileNotFoundError(tr("error.folder_unavailable", path=path))
             if hasattr(os, "startfile"):
                 os.startfile(path)
+            elif sys.platform.startswith("linux"):
+                subprocess.Popen(["xdg-open", path])
             else:
                 webbrowser.open(Path(path).as_uri())
         except OSError as error:

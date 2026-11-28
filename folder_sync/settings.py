@@ -9,6 +9,10 @@ from tempfile import NamedTemporaryFile
 
 
 def fallback_settings_path():
+    if sys.platform.startswith("linux"):
+        xdg_data = Path(os.environ.get("XDG_DATA_HOME", ""))
+        data_home = xdg_data if xdg_data.is_absolute() else Path.home() / ".local" / "share"
+        return data_home / "GitHubFolderSync" / "settings" / "settings.json"
     local_app_data = os.environ.get("LOCALAPPDATA")
     if local_app_data:
         return Path(local_app_data) / "GitHubFolderSync" / "settings" / "settings.json"
